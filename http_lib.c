@@ -33,11 +33,10 @@
 
 static char *rcsid="$Id: http_lib.c,v 3.5 1998/09/23 06:19:15 dl Exp $";
 
-#define VERBOSE
-
 /* http_lib - Http data exchanges mini library.
  */
 
+#define VERBOSE
 
 #ifndef OSK
 /* unix */
@@ -322,7 +321,7 @@ http_retcode http_get(filename, pdata, plength, typebuf)
   if (typebuf) *typebuf='\0';
 
   ret=http_query("GET",filename,"",KEEP_OPEN, NULL, 0, &fd);
-  if (ret==200) {
+  if (ret==OK200) {
     while (1) {
       n=http_read_line(fd,header,MAXBUF-1);
 #ifdef VERBOSE
@@ -388,7 +387,7 @@ http_retcode http_head(filename, plength, typebuf)
   if (typebuf) *typebuf='\0';
 
   ret=http_query("HEAD",filename,"",KEEP_OPEN, NULL, 0, &fd);
-  if (ret==200) {
+  if (ret==OK200) {
     while (1) {
       n=http_read_line(fd,header,MAXBUF-1);
 #ifdef VERBOSE
@@ -488,3 +487,97 @@ http_retcode http_parse_url(url,pfilename)
   return OK0;
 }
 
+http_retcode
+http_post(char *filename, char *data, int length, char *type, char **pdata, int *plength, char **ptype)
+{
+	int fd;
+	char *pc;
+	int n;
+	char header[MAXBUF];
+	char typebuf[MAXBUF];
+	http_retcode ret;
+
+	if (data == NULL)
+		return ERRNULL;
+
+	if (length <= 0)
+		return ERRNULL;
+
+	if (!pdata)
+		return ERRNULL;
+	else
+		*pdata = NULL;
+
+	if (!plength)
+		return ERRNULL;
+	else
+		*plength = 0;
+
+	if (!ptype)
+		return ERRNULL;
+	else
+		*ptype = NULL;
+
+	if (type) 
+		sprintf(header, "Content-length: %d\015\012Content-type: %.64s\015\012",
+	        	length, type);
+	else
+		sprintf(header, "Content-length: %d\015\012", length);
+
+	ret = http_query("POST", filename, header, KEEP_OPEN, data, length, &fd);
+
+	if (ret==OK200) { 
+		while (1) {
+			n = http_read_line(fd,header,MAXBUF-1);
+#ifdef VERBOSE
+			fputs(header,stderr);
+			putc('\n',stderr);
+#endif	
+			if (n<=0) {
+				close(fd);
+				return ERRRDHD;
+      			}
+
+      			/* empty line ? (=> end of header) */
+			if (n>0 && (*header) =='\0')
+				break;
+
+			/* try to parse some keywords : */
+			/* convert to lower case 'till a : is found or end of string */
+			for (pc=header; (*pc!=':' && *pc) ; pc++) *pc=tolower(*pc);
+			sscanf(header,"content-length: %d",plength);
+			sscanf(header,"content-type: %s", typebuf);
+		}
+
+		*ptype = strdup(typebuf);
+
+		if (*plength<=0) {
+			close(fd);
+			free(*ptype);
+			*ptype = NULL;
+			return OK200; /* XXX: POST didn't return data */
+    		}
+
+		if (!(*pdata=malloc(*plength))) {
+			close(fd);
+		    	free(*ptype);
+			*ptype = NULL;
+			return ERRMEM;
+		}
+
+		n=http_read_buffer(fd,*pdata,*plength);
+    		close(fd);
+
+		if (n!=*plength) {
+			free(*pdata);
+			*pdata = NULL;
+			free(*ptype);
+			*ptype = NULL;
+			ret=ERRRDDT;
+		}
+	} else if (ret>=0) {
+		close(fd);
+	}
+
+	return ret;
+}

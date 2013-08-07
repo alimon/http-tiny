@@ -48,7 +48,8 @@ int main(argc,argv)
     DOPUT,
     DOGET,
     DODEL,
-    DOHEA
+    DOHEA,
+	DOPOST
   } todo=ERR;
 
   if (argc!=3) {
@@ -65,6 +66,8 @@ int main(argc,argv)
     todo=DODEL;
   } else if (!strcasecmp(argv[i],"head")) {
     todo=DOHEA;
+  } else if (!strcasecmp(argv[i],"post")) {
+    todo=DOPOST;
   }
   if (todo==ERR) {
     fprintf(stderr,
@@ -87,6 +90,9 @@ int main(argc,argv)
   if (ret<0) {if (proxy) free(http_proxy_server); return ret;}
 
   switch (todo) {
+	char *data;
+	int data_len;
+	char *type;
 /* *** PUT  *** */
     case DOPUT:
       fprintf(stderr,"reading stdin...\n");
@@ -130,6 +136,13 @@ int main(argc,argv)
       ret=http_delete(filename);
       fprintf(stderr,"res=%d\n",ret);
       break;
+	case DOPOST:
+
+	ret = http_post(filename, "your_name=1", 11, NULL, &data, &data_len, &type);
+      	fprintf(stderr,"res=%d\n",ret);
+      	fprintf(stderr,"%s\n", type);
+      	fprintf(stderr,"%s\n", data);
+	break;
 /* impossible... */
     default:
       fprintf(stderr,"impossible todo value=%d\n",todo);
