@@ -29,7 +29,7 @@ CDEBUGFLAGS = -O -Wmissing-prototypes -Wall -ansi -pedantic
 #CDEBUGFLAGS = -O
 
 # defines (needed for string ops on linux2/glibc for instance):
-DEFINES= -D_XOPEN_SOURCE -D_XOPEN_SOURCE_EXTENDED
+DEFINES= -D_XOPEN_SOURCE -D_XOPEN_SOURCE_EXTENDED -D_GNU_SOURCE
 
 # for HPUX (ansi)
 #DEFINES= -D_HPUX_SOURCE
