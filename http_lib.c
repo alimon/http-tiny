@@ -150,7 +150,7 @@ extern http_retcode
 http_proxy_url(char *proxy)
 {
 	http_retcode r = OK0;
-	char *filename;
+	char *filename = NULL;
 
 	r = http_parse_url(proxy, &filename);
 	if (r < 0)
@@ -164,6 +164,8 @@ http_proxy_url(char *proxy)
 	http_proxy_server = http_server;
 	http_server = NULL;
 	http_proxy_port = http_port;
+
+	free(filename);
 
 	return r;
 }
