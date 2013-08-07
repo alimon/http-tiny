@@ -10,19 +10,7 @@
  */
 
  /* declarations */
-
 typedef int (*http_base64_encoder)(const char *in, int in_size, char **out, int *out_size);
-
-extern char *http_server;
-
-extern int http_port;
-
-extern char *http_proxy_server;
-
-extern int http_proxy_port;
-
-extern http_base64_encoder http_b64_enc;
-extern char * http_basic_auth;
 
 /* return type */
 typedef enum {
@@ -60,17 +48,15 @@ typedef enum {
 
 
 /* prototypes */
+extern http_retcode http_parse_url(char *url, char **pfilename);
+extern http_retcode http_proxy_url(char *url);
 
-#ifndef OSK
-http_retcode http_put(char *filename, char *data, int length, 
+extern http_retcode http_put(char *filename, char *data, int length, 
 	     int overwrite, char *type) ;
-http_retcode http_get(char *filename, char **pdata,int *plength, char *typebuf);
+extern http_retcode http_get(char *filename, char **pdata,int *plength, char *typebuf);
 
-http_retcode http_parse_url(char *url, char **pfilename);
+extern http_retcode http_delete(char *filename) ;
 
-http_retcode http_delete(char *filename) ;
+extern http_retcode http_head(char *filename, int *plength, char *typebuf);
 
-http_retcode http_head(char *filename, int *plength, char *typebuf);
-
-http_retcode http_post(char *filename, char *data, int length, char *type, char **pdata, int *plength, char **ptype);
-#endif
+extern http_retcode http_post(char *filename, char *data, int length, char *type, char **pdata, int *plength, char **ptype);

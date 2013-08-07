@@ -79,15 +79,12 @@ int main(argc,argv)
   
 
   if ((proxy=getenv("http_proxy"))) {
-    ret=http_parse_url(proxy,&filename);
+    ret=http_proxy_url(proxy);
     if (ret<0) return ret;
-    http_proxy_server=http_server;
-    http_server=NULL;
-    http_proxy_port=http_port;
   }
 
   ret=http_parse_url(argv[i],&filename);
-  if (ret<0) {if (proxy) free(http_proxy_server); return ret;}
+  if (ret<0) return ret;
 
   switch (todo) {
 	char *data;
@@ -150,8 +147,6 @@ int main(argc,argv)
   }
   if (data) free(data);
   free(filename);
-  free(http_server);
-  if (proxy) free(http_proxy_server);
   
   return ( (ret==201) || (ret==200) ) ? 0 : ret;
 }
