@@ -11,6 +11,7 @@
 
  /* declarations */
 
+typedef int (*http_base64_encoder)(const char *in, int in_size, char **out, int *out_size);
 
 extern char *http_server;
 
@@ -20,6 +21,8 @@ extern char *http_proxy_server;
 
 extern int http_proxy_port;
 
+extern http_base64_encoder http_b64_enc;
+extern char * http_basic_auth;
 
 /* return type */
 typedef enum {

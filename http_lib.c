@@ -82,6 +82,10 @@ int http_proxy_port=0;
 /* user agent id string */
 static char *http_user_agent="adlib/3 ($Date: 1998/09/23 06:19:15 $)";
 
+/* base auth stuff */
+http_base64_encoder http_b64_enc = NULL;
+char *http_basic_auth = NULL;
+
 /*
  * read a line from file descriptor
  * returns the number of bytes read. negative if a read error occured
