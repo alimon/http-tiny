@@ -68,6 +68,9 @@ all: $(TARGETS)
 http:  http.o libhttp.a
 	$(CC) $(LDFLAGS) $@.o -lhttp $(SYSLIBS) -o $@
 
+http-basic-auth: http-basic-auth.o libhttp.a
+	$(CC) $(LDFLAGS) $@.o -lhttp -lb64 $(SYSLIBS) -o $@
+
 libhttp.a:   $(LIBOBJS)
 	$(RM) $@
 	$(AR) r $@ $(LIBOBJS)
@@ -87,6 +90,7 @@ clean:
 	$(RM) *~
 	$(RM) #*
 	$(RM) core
+	$(RM) http-basic-auth
 
 depend:
 	makedepend $(INCLPATH) $(DEFINES) *.c

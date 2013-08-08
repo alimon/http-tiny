@@ -8,8 +8,11 @@
  *
  * $Id: http.c,v 1.4 1998/09/23 06:11:55 dl Exp $
  *
- * $Log: http.c,v $
- * 
+ * Revision 1.5.x 2013/08/07 21:41:42 -0500
+ * Added Basic auth support, base64 encoding is provided for external
+ * function trought http_set_base64_encoder.
+ * Author: alimon <limon.anibal@gmail.com>
+ *
  * Revision 1.5.x 2013/08/07 08:30:42 -0500
  * Removed no used code for OS9, and code functions to access global
  * variables now static instead extern.
@@ -18,7 +21,7 @@
  * Revisionq 1.5.x 2013/08/07 00:20:42 -0500
  * Added support for POST
  * Author: alimon <limon.anibal@gmail.com>
- *
+ * $Log: http.c,v $
  * Revision 1.4  1998/09/23 06:11:55  dl
  * one more lint
  *
@@ -44,8 +47,13 @@ static char *rcsid="$Id: http.c,v 1.4 1998/09/23 06:11:55 dl Exp $";
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+
+#include <b64/cencode.h>
 
 #include "http_lib.h"
+
+static int myb64enc(const char *in, char **out);
 
 int main(argc,argv) 
      int argc;
@@ -65,11 +73,15 @@ int main(argc,argv)
 	DOPOST
   } todo=ERR;
 
-  if (argc!=3) {
-    fprintf(stderr,"usage: http <cmd> <url>\n\tby <L@Demailly.com>\n");
+  if (argc!=5) {
+    fprintf(stderr,"usage: http <cmd> <url> <user> <pass>\n\tby <L@Demailly.com>\n");
     return 1;
   }
   i=1;
+
+	http_set_base64_encoder(&myb64enc);
+	if ((ret = http_set_basic_auth(argv[3], argv[4])) < 0)
+		return ret;
   
   if (!strcasecmp(argv[i],"put")) {
     todo=DOPUT;
@@ -162,4 +174,38 @@ int main(argc,argv)
   free(filename);
   
   return ( (ret==201) || (ret==200) ) ? 0 : ret;
+}
+
+static int
+myb64enc(const char *in, char **out)
+{
+	int r = 0;
+	int b64_max_size;
+
+	if (in == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	b64_max_size = (((strlen(in) + 1) * 8) + 5) / 6;
+	*out = malloc(b64_max_size);
+	if (*out == NULL) {
+		errno = ENOMEM;
+		return -1;
+	}
+
+	{
+		char* c = *out;
+		int cnt = 0;
+		base64_encodestate s;
+		
+		base64_init_encodestate(&s);
+		cnt = base64_encode_block(in, strlen(in), c, &s);
+		c += cnt;
+		cnt = base64_encode_blockend(c, &s);
+		c += cnt;
+		*c = '\0';
+	}
+
+	return r;
 }

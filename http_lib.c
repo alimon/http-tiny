@@ -1,6 +1,7 @@
 /*
- *  Http put/get mini lib
+ *  Http put/get/post mini lib
  *  written by L. Demailly
+ *  (c) 2013 Anibal Limon - limon.anibal@gmail.com
  *  (c) 1998 Laurent Demailly - http://www.demailly.com/~dl/
  *  (c) 1996 Observatoire de Paris - Meudon - France
  *  see LICENSE for terms, conditions and DISCLAIMER OF ALL WARRANTIES
@@ -8,6 +9,11 @@
  * $Id: http_lib.c,v 3.5 1998/09/23 06:19:15 dl Exp $ 
  *
  * Description : Use http protocol, connects to server to echange data
+ *
+ * Revision 3.6.x 2013/08/07 21:41:42 -0500
+ * Added Basic auth support, base64 encoding is provided for external
+ * function trought http_set_base64_encoder.
+ * Author: alimon <limon.anibal@gmail.com>
  *
  * Revision 3.6.x 2013/08/07 08:30:42 -0500
  * Removed no used code for OS9, and code functions to access global
@@ -491,14 +497,14 @@ static http_retcode http_query(command, url, additional_header, mode,
     if (proxy) {
 	if (http_basic_auth) {
       sprintf(header,
-"%s http://%.128s:%d/%.256s HTTP/1.0\015\012User-Agent: %s\015\012%s\015\012Authorization: Basic %s\015\012",
+"%s http://%.128s:%d/%.256s HTTP/1.0\015\012User-Agent: %s\015\012Authorization: Basic %s\015\012%s\015\012",
 	      command,
 	      http_server,
 	      http_port,
 	      url,
 	      http_user_agent,
-	      additional_header,
-		http_basic_auth
+		http_basic_auth,
+	      additional_header
 	      );
 	} else {
       sprintf(header,
@@ -514,12 +520,12 @@ static http_retcode http_query(command, url, additional_header, mode,
     } else {
 	if (http_basic_auth) {
       sprintf(header,
-"%s /%.256s HTTP/1.0\015\012User-Agent: %s\015\012%s\015\012Authorization: Basic %s\015\012",
+"%s /%.256s HTTP/1.0\015\012User-Agent: %s\015\012Authorization: Basic %s\015\012%s\015\012",
 	      command,
 	      url,
 	      http_user_agent,
-	      additional_header,
-		http_basic_auth
+		http_basic_auth,
+	      additional_header
 	      );
 	} else {
       sprintf(header,
@@ -534,21 +540,21 @@ static http_retcode http_query(command, url, additional_header, mode,
 
     hlg=strlen(header);
 
-    /* send header */
-    if (write(s,header,hlg)!=hlg)
-      ret= ERRWRHD;
-
-    /* send data */
-    else if (length && data && (write(s,data,length)!=length) ) 
-      ret= ERRWRDT;
-
-    else {
-      /* read result & check */
-      ret=http_read_line(s,header,MAXBUF-1);
 #ifdef _DEBUG
       fputs(header,stderr);
       putc('\n',stderr);
 #endif	
+
+    /* send header */
+    if (write(s,header,hlg)!=hlg) {
+      ret= ERRWRHD;
+    /* send data */
+    } else if (length && data && (write(s,data,length)!=length) ) {
+      ret= ERRWRDT;
+    } else {
+      /* read result & check */
+      ret=http_read_line(s,header,MAXBUF-1);
+
       if (ret<=0) 
 	ret=ERRRDHD;
       else if (sscanf(header,"HTTP/1.%*d %03d",(int*)&ret)!=1) 
@@ -626,21 +632,19 @@ http_set_basic_auth(char *user, char *pass)
 {
 	http_retcode r = OK0;
 	char userpass[MAXBUF];
-	int userpass_size;
 	char *b64;
-	int b64_size;
 
 	if (http_b64_enc == NULL || user == NULL || pass == NULL)
 		return ERRNULL;
 
-	userpass_size = snprintf(userpass, MAXBUF, "%s:%s", user, pass);
-	if ((*http_b64_enc)(userpass, userpass_size, &b64, &b64_size) == -1)
+	snprintf(userpass, MAXBUF, "%s:%s", user, pass);
+	if ((*http_b64_enc)(userpass, &b64) == -1)
 		return ERRMEM;
 
-	if (http_basic_auth) {
+	if (http_basic_auth)
 		free(http_basic_auth);
-		http_basic_auth = b64;
-	}
+
+	http_basic_auth = b64;
 	
 	return r;
 }

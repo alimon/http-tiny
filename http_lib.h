@@ -1,6 +1,7 @@
 /*
- *  Http put/get mini lib
+ *  Http put/get/post mini lib
  *  written by L. Demailly
+ *  (c) 2013 Anibal Limon - limon.anibal@gmail.com
  *  (c) 1998 Laurent Demailly - http://www.demailly.com/~dl/
  *  (c) 1996 Observatoire de Paris - Meudon - France
  *  see LICENSE for terms, conditions and DISCLAIMER OF ALL WARRANTIES
@@ -10,7 +11,7 @@
  */
 
  /* declarations */
-typedef int (*http_base64_encoder)(const char *in, int in_size, char **out, int *out_size);
+typedef int (*http_base64_encoder)(const char *in, char **out);
 
 /* return type */
 typedef enum {

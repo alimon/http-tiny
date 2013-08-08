@@ -1,5 +1,6 @@
  
 *** Http tiny library & command line program  package ***  release 1.2
+(c) 2013 Anibal Limon
 (c) 1998 Laurent Demailly       -  see LICENSE
 (c) 1996 Observatoire de Paris
 Author(s): Laurent Demailly <L@Demailly.com> - http://www.demailly.com/~dl/
@@ -20,6 +21,7 @@ To compile / INSTALL:
 3) type  make  
    (you might have edit http_lib.c for includes, in that case, 
    Please tell me...)
+3-x) for build http-basic-auth type make http-basic-auth you need libb64
 4) type  make install
 5) enjoy using "http" and/or the library in your programs (-lhttp)
 6) send feedback and your best uses of the lib to
