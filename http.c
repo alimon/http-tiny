@@ -87,12 +87,16 @@ int main(argc,argv)
   }
 
   ret=http_parse_url(argv[i],&filename);
-  if (ret<0) {if (proxy) free(http_proxy_server); return ret;}
+
+  if (ret<0) {
+    if (proxy) free(http_proxy_server); 
+    return ret;
+  }
 
   switch (todo) {
-	char *data;
-	int data_len;
-	char *type;
+  char *data;
+  int data_len;
+  char *type;
 /* *** PUT  *** */
     case DOPUT:
       fprintf(stderr,"reading stdin...\n");
@@ -100,21 +104,21 @@ int main(argc,argv)
       blocksize=16384;
       lg=0;  
       if (!(data=malloc(blocksize))) {
-	return 3;
+        return 3;
       }
       while (1) {
-	r=read(0,data+lg,blocksize-lg);
-	if (r<=0) break;
-	lg+=r;
-	if ((3*lg/2)>blocksize) {
-	  blocksize *= 4;
-	  fprintf(stderr,
-		  "read to date: %9d bytes, reallocating buffer to %9d\n",
-		  lg,blocksize);	
-	  if (!(data=realloc(data,blocksize))) {
-	    return 4;
-	  }
-	}
+        r=read(0,data+lg,blocksize-lg);
+        if (r<=0) break;
+        lg+=r;
+        if ((3*lg/2)>blocksize) {
+          blocksize *= 4;
+          fprintf(stderr,
+            "read to date: %9d bytes, reallocating buffer to %9d\n",
+            lg,blocksize);	
+          if (!(data=realloc(data,blocksize))) {
+            return 4;
+          }
+        }
       }
       fprintf(stderr,"read %d bytes\n",lg);
       ret=http_put(filename,data,lg,0,NULL);
@@ -136,12 +140,11 @@ int main(argc,argv)
       ret=http_delete(filename);
       fprintf(stderr,"res=%d\n",ret);
       break;
-	case DOPOST:
-
-	ret = http_post(filename, "your_name=1", 11, NULL, &data, &data_len, &type);
-      	fprintf(stderr,"res=%d\n",ret);
-      	fprintf(stderr,"%s\n", type);
-      	fprintf(stderr,"%s\n", data);
+    case DOPOST:
+      ret = http_post(filename, "your_name=1", 11, NULL, &data, &data_len, &type);
+      fprintf(stderr,"res=%d\n",ret);
+      fprintf(stderr,"%s\n", type);
+      fprintf(stderr,"%s\n", data);
 	break;
 /* impossible... */
     default:
