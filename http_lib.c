@@ -145,6 +145,7 @@ http_parse_url(url,pfilename)
 }
 
 /*
+ * sets proxy to use
  */
 extern http_retcode
 http_proxy_url(char *proxy)
@@ -347,7 +348,8 @@ http_delete(filename)
   return http_query("DELETE",filename,"",CLOSE, NULL, 0, NULL);
 }
 
-/**
+/*
+ * post data
  */
 extern http_retcode
 http_post(char *filename, char *data, int length, char *type, char **pdata, int *plength, char **ptype)
@@ -359,26 +361,13 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 	char typebuf[MAXBUF];
 	http_retcode ret;
 
-	if (data == NULL)
+	if (data == NULL || length <= 0 || pdata == NULL || plength == NULL ||
+		ptype == NULL)
 		return ERRNULL;
 
-	if (length <= 0)
-		return ERRNULL;
-
-	if (!pdata)
-		return ERRNULL;
-	else
-		*pdata = NULL;
-
-	if (!plength)
-		return ERRNULL;
-	else
-		*plength = 0;
-
-	if (!ptype)
-		return ERRNULL;
-	else
-		*ptype = NULL;
+	*pdata = NULL;
+	*plength = 0;
+	*ptype = NULL;
 
 	if (type) 
 		sprintf(header, "Content-length: %d\015\012Content-type: %.64s\015\012",
@@ -500,6 +489,18 @@ static http_retcode http_query(command, url, additional_header, mode,
     
     /* create header */
     if (proxy) {
+	if (http_basic_auth) {
+      sprintf(header,
+"%s http://%.128s:%d/%.256s HTTP/1.0\015\012User-Agent: %s\015\012%s\015\012Authorization: Basic %s\015\012",
+	      command,
+	      http_server,
+	      http_port,
+	      url,
+	      http_user_agent,
+	      additional_header,
+		http_basic_auth
+	      );
+	} else {
       sprintf(header,
 "%s http://%.128s:%d/%.256s HTTP/1.0\015\012User-Agent: %s\015\012%s\015\012",
 	      command,
@@ -509,7 +510,18 @@ static http_retcode http_query(command, url, additional_header, mode,
 	      http_user_agent,
 	      additional_header
 	      );
+	}
     } else {
+	if (http_basic_auth) {
+      sprintf(header,
+"%s /%.256s HTTP/1.0\015\012User-Agent: %s\015\012%s\015\012Authorization: Basic %s\015\012",
+	      command,
+	      url,
+	      http_user_agent,
+	      additional_header,
+		http_basic_auth
+	      );
+	} else {
       sprintf(header,
 "%s /%.256s HTTP/1.0\015\012User-Agent: %s\015\012%s\015\012",
 	      command,
@@ -517,8 +529,9 @@ static http_retcode http_query(command, url, additional_header, mode,
 	      http_user_agent,
 	      additional_header
 	      );
+	}
     }
-    
+
     hlg=strlen(header);
 
     /* send header */
@@ -593,4 +606,41 @@ static int http_read_buffer (fd,buffer,length)
     buffer+=r;
   }
   return n;
+}
+
+/**
+ * set external base64 encoder for basic auth
+ */
+extern void
+http_set_base64_encoder(http_base64_encoder enc)
+{
+	http_b64_enc = enc;
+}
+
+/**
+ * set basic auth for use in all requests, calls external
+ * base64 encoder
+ */
+extern http_retcode
+http_set_basic_auth(char *user, char *pass)
+{
+	http_retcode r = OK0;
+	char userpass[MAXBUF];
+	int userpass_size;
+	char *b64;
+	int b64_size;
+
+	if (http_b64_enc == NULL || user == NULL || pass == NULL)
+		return ERRNULL;
+
+	userpass_size = snprintf(userpass, MAXBUF, "%s:%s", user, pass);
+	if ((*http_b64_enc)(userpass, userpass_size, &b64, &b64_size) == -1)
+		return ERRMEM;
+
+	if (http_basic_auth) {
+		free(http_basic_auth);
+		http_basic_auth = b64;
+	}
+	
+	return r;
 }

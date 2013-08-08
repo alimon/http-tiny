@@ -60,3 +60,7 @@ extern http_retcode http_delete(char *filename) ;
 extern http_retcode http_head(char *filename, int *plength, char *typebuf);
 
 extern http_retcode http_post(char *filename, char *data, int length, char *type, char **pdata, int *plength, char **ptype);
+
+extern void http_set_base64_encoder(http_base64_encoder enc);
+
+extern http_retcode http_set_basic_auth(char *user, char *pass);
