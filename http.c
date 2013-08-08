@@ -97,12 +97,15 @@ int main(argc,argv)
 	
 	if ((proxy=getenv("http_proxy"))) {
 		ret=http_proxy_url(proxy);
-		if (ret<0) return ret;
+		if (ret<0) { 
+			return ret;
+		}
 	}
 	
 	ret=http_parse_url(argv[i],&filename);
-	if (ret<0)
+	if (ret<0) {
 		return ret;
+	}
 	
 	switch (todo) {
 	/* *** PUT  *** */
@@ -118,7 +121,7 @@ int main(argc,argv)
 
 		while (1) {
 			r=read(0,data+lg,blocksize-lg);
-			if (r<=0) break;
+			if (r<=0) break; 
 			lg+=r;
 			if ((3*lg/2)>blocksize) {
 				blocksize *= 4;
@@ -163,8 +166,14 @@ int main(argc,argv)
 		return 5;
 	}
 	
-	if (type) free(type);
-	if (data) free(data);
+	if (type) {
+		free(type);
+	}
+
+	if (data) {
+		 free(data);
+	}
+
 	free(filename);
 	 
 	return ( (ret==201) || (ret==200) ) ? 0 : ret;
