@@ -71,7 +71,8 @@ int main(argc,argv)
   }
   if (todo==ERR) {
     fprintf(stderr,
-	    "Invalid <cmd> '%s',\nmust be 'put', 'get', 'delete', or 'head'\n",
+	    "Invalid <cmd> '%s',\nmust be "
+            "'put', 'get', 'post', 'delete', or 'head'\n",
 	    argv[i]);
     return 2;
   }
