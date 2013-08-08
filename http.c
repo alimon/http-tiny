@@ -35,9 +35,6 @@
  */
 
 
-static char *rcsid="$Id: http.c,v 1.4 1998/09/23 06:11:55 dl Exp $";
-
-
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -47,9 +44,7 @@ static char *rcsid="$Id: http.c,v 1.4 1998/09/23 06:11:55 dl Exp $";
 
 #include "http_lib.h"
 
-int main(argc,argv) 
-     int argc;
-     char **argv;
+int main(int argc,char* argv[]) 
 {
 	int  ret,lg,blocksize,r,i;
 	char typebuf[70];
