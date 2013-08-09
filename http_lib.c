@@ -97,16 +97,15 @@ static char *http_basic_auth = NULL;
 /* parses an url : setting the http_server and http_port global variables
  * and returning the filename to pass to http_get/put/...
  * returns a negative error code or 0 if sucessfully parsed.
+ * writeable copy of an url 
+ *	char *url;  
+ * address of a pointer that will be filled with allocated filename
+ * the pointer must be equal to NULL before calling or it will be 
+ * automatically freed (free(3))
+ *	char **pfilename; 
  */
 extern http_retcode
-http_parse_url(url,pfilename)
-	/* writeable copy of an url */
-	char *url;  
-	/* address of a pointer that will be filled with allocated filename
- 	 * the pointer must be equal to NULL before calling or it will be 
-	 * automatically freed (free(3))
-	 */
-	char **pfilename; 
+http_parse_url(char *url, char **pfilename)
 {
 	char *pc,c;
   
@@ -186,15 +185,15 @@ http_proxy_url(char *proxy)
  *
  * limitations: filename is truncated to first 256 characters 
  *              and type to 64.
+ *	char *filename	name of the ressource to create 
+ *	char *data	pointer to the data to send
+ *	int length	length of the data to send 
+ *	int overwrite	flag to request to overwrite the ressource if it
+ *			 was already existing 
+ *	char *type	type of the data, if NULL default type is used
  */
 extern http_retcode
-http_put(filename, data, length, overwrite, type) 
-     char *filename;  /* name of the ressource to create */
-     char *data;      /* pointer to the data to send   */
-     int length;      /* length of the data to send  */
-     int overwrite;   /* flag to request to overwrite the ressource if it
-			 was already existing */
-     char *type;      /* type of the data, if NULL default type is used */
+http_put(char *filename, char *data, int length, int overwrite, char *type) 
 {
 	char header[MAXBUF];
 	if (type) 
@@ -211,28 +210,28 @@ http_put(filename, data, length, overwrite, type)
 }
 	
 /*
-* Get data from the server
-*
-* This function gets data from the http data server.
-* The data is read from the ressource named filename.
-* Address of new new allocated memory block is filled in pdata
-* whose length is returned via plength.
-* 
-* returns a negative error code or a positive code from the server
-* 
-*
-* limitations: filename is truncated to first 256 characters
-*/
+ * Get data from the server
+ *
+ * This function gets data from the http data server.
+ * The data is read from the ressource named filename.
+ * Address of new new allocated memory block is filled in pdata
+ * whose length is returned via plength.
+ * 
+ * returns a negative error code or a positive code from the server
+ * 
+ *	char *filename	name of the ressource to read 
+ *	char **pdata	address of a pointer variable which will be set
+ *			to point toward allocated memory containing read data.
+ *	int  *plength	address of integer variable which will be set to
+ *			length of the cead data 
+ *	char *typebuf	allocated buffer where the read data type is returned.
+ *			If NULL, the type is not returned
+ *	 
+ *
+ * limitations: filename is truncated to first 256 characters
+ */
 extern http_retcode
-http_get(filename, pdata, plength, typebuf) 
-	char *filename; /* name of the ressource to read */
-	char **pdata; /* address of a pointer variable which will be set
-	to point toward allocated memory containing read data.*/
-	int  *plength;/* address of integer variable which will be set to
-	length of the read data */
-	char *typebuf; /* allocated buffer where the read data type is returned.
-	If NULL, the type is not returned */
-	 
+http_get(char *filename, char **pdata, int *plength, char *typebuf) 
 {
 	http_retcode ret;
 	 
@@ -290,15 +289,15 @@ http_get(filename, pdata, plength, typebuf)
 *
 * returns a negative error code or a positive code from the server
 * 
+*	char *filename	name of the ressource to read 
+*	int  *plength	address of integer variable which will be set to
+*			length of the data
+*	char *typebuf	allocated buffer where the data type is returned.
+*			If NULL, the type is not returned 
 * limitations: filename is truncated to first 256 characters
 */
 extern http_retcode
-http_head(filename, plength, typebuf) 
-	char *filename; /* name of the ressource to read */
-	int  *plength;/* address of integer variable which will be set to
-	length of the data */
-	char *typebuf; /* allocated buffer where the data type is returned.
-	If NULL, the type is not returned */
+http_head(char *filename, int *plength, char *typebuf) 
 {
 /* mostly copied from http_get : */
 	http_retcode ret;
@@ -344,12 +343,12 @@ http_head(filename, plength, typebuf)
  *
  * returns a negative error code or a positive code from the server
  *
+ *	char *filename	name of the ressource to create
  * limitations: filename is truncated to first 256 characters 
  */
 	
 extern http_retcode
-http_delete(filename) 
-	char *filename;  /* name of the ressource to create */
+http_delete(char *filename) 
 {
 	return http_query("DELETE",filename,"",CLOSE, NULL, 0, NULL);
 }
@@ -448,16 +447,20 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
  *
  * Limitations: the url is truncated to first 256 chars and
  * the server name to 128 in case of proxy request.
+ *
+ * char *command		Command to send
+ * char *url;			url / filename queried
+ * char *additional_header	Additional header 
+ * querymode mode; 		Type of query
+ * char *data			Data to send after header. 
+ *				If NULL, not data is sent 
+ * int length			size of data
+ * int *pfd			pointer to variable where to 
+ *				set file descriptor value
  */
-static http_retcode http_query(command, url, additional_header, mode,
-	data, length, pfd) 
-	char *command;	/* command to send  */
-	char *url;		/* url / filename queried  */
-	char *additional_header;	/* additional header */
-	querymode mode; 		/* type of query */
-	char *data;  /* Data to send after header. If NULL, not data is sent */
-	int length;  /* size of data */
-	int *pfd;    /* pointer to variable where to set file descriptor value */
+static http_retcode
+http_query(char *command, char *url, char *additional_header, 
+	querymode mode, char *data, int length, int *pfd) 
 {
 	int     s;
 	struct  hostent *hp;
@@ -576,12 +579,13 @@ static http_retcode http_query(command, url, additional_header, mode,
  * returns the number of bytes read. negative if a read error occured
  * before the end of line or the max.
  * cariage returns (CR) are ignored.
+ * 	int fd		File descriptor to read from
+ * 	char *buffer	Placeholder for data
+ *	int max		Max number of bytes to read
  */
-static int http_read_line (fd,buffer,max) 
-	int fd; /* file descriptor to read from */
-	char *buffer; /* placeholder for data */
-	int max; /* max number of bytes to read */
-{ /* not efficient on long lines (multiple unbuffered 1 char reads) */
+static int http_read_line (int fd, char *buffer, int max) 
+{ 
+	/* not efficient on long lines (multiple unbuffered 1 char reads) */
 	int n=0;
 	while (n<max) {
 		if (read(fd,buffer,1)!=1) {
@@ -602,11 +606,13 @@ static int http_read_line (fd,buffer,max)
  * retries reading until the number of bytes requested is read.
  * returns the number of bytes read. negative if a read error (EOF) occured
  * before the requested length.
+ *
+ *	int fd		file descriptor to read from
+ *	char *buffer	placeholder for data
+ *	int length	number of bytes to read
  */
-static int http_read_buffer (fd,buffer,length) 
-	int fd;  /* file descriptor to read from */
-	char *buffer; /* placeholder for data */
-	int length; /* number of bytes to read */
+static int 
+http_read_buffer (int fd, char *buffer, int length) 
 {
 	int n,r;
 	for (n=0; n<length; n+=r) {
