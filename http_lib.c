@@ -70,13 +70,13 @@ static char *rcsid="$Id: http_lib.c,v 3.5 1998/09/23 06:19:15 dl Exp $";
 
 typedef enum 
 {
-  CLOSE,  /* Close the socket after the query (for put) */
-  KEEP_OPEN /* Keep it open */
+	CLOSE,  /* Close the socket after the query (for put) */
+	KEEP_OPEN /* Keep it open */
 } querymode;
 
 static http_retcode http_query(char *command, char *url,
-			       char *additional_header, querymode mode, 
-			       char* data, int length, int *pfd);
+			 	char *additional_header, querymode mode, 
+		 		char* data, int length, int *pfd);
 static int http_read_line (int fd,char *buffer, int max) ;
 static int http_read_buffer (int fd,char *buffer, int max) ;
 
@@ -97,57 +97,56 @@ static char *http_basic_auth = NULL;
 /* parses an url : setting the http_server and http_port global variables
  * and returning the filename to pass to http_get/put/...
  * returns a negative error code or 0 if sucessfully parsed.
+ * writeable copy of an url 
+ *	char *url;  
+ * address of a pointer that will be filled with allocated filename
+ * the pointer must be equal to NULL before calling or it will be 
+ * automatically freed (free(3))
+ *	char **pfilename; 
  */
 extern http_retcode
-http_parse_url(url,pfilename)
-    /* writeable copy of an url */
-     char *url;  
-    /* address of a pointer that will be filled with allocated filename
-     * the pointer must be equal to NULL before calling or it will be 
-     * automatically freed (free(3))
-     */
-     char **pfilename; 
+http_parse_url(char *url, char **pfilename)
 {
-  char *pc,c;
+	char *pc,c;
   
-  http_port=80;
-  if (http_server) {
-    free(http_server);
-    http_server=NULL;
-  }
-  if (*pfilename) {
-    free(*pfilename);
-    *pfilename=NULL;
-  }
-  
-  if (strncasecmp("http://",url,7)) {
+	http_port=80;
+	if (http_server) {
+		free(http_server);
+		http_server=NULL;
+	}
+	if (*pfilename) {
+		free(*pfilename);
+		*pfilename=NULL;
+	}
+	 
+	if (strncasecmp("http://",url,7)) {
 #ifdef _DEBUG
-    fprintf(stderr,"invalid url (must start with 'http://')\n");
+		fprintf(stderr,"invalid url (must start with 'http://')\n");
 #endif
-    return ERRURLH;
-  }
-  url+=7;
-  for (pc=url,c=*pc; (c && c!=':' && c!='/');) c=*pc++;
-  *(pc-1)=0;
-  if (c==':') {
-    if (sscanf(pc,"%d",&http_port)!=1) {
+		return ERRURLH;
+	}
+	url+=7;
+	for (pc=url,c=*pc; (c && c!=':' && c!='/');) c=*pc++;
+	*(pc-1)=0;
+	if (c==':') {
+		if (sscanf(pc,"%d",&http_port)!=1) {
 #ifdef _DEBUG
-      fprintf(stderr,"invalid port in url\n");
+			fprintf(stderr,"invalid port in url\n");
 #endif
-      return ERRURLP;
-    }
-    for (pc++; (*pc && *pc!='/') ; pc++) ;
-    if (*pc) pc++;
-  }
+			return ERRURLP;
+		}
+		for (pc++; (*pc && *pc!='/') ; pc++) ;
+		if (*pc) pc++;
+	}
 
-  http_server=strdup(url);
-  *pfilename= strdup ( c ? pc : "") ;
-
+	http_server=strdup(url);
+	*pfilename= strdup ( c ? pc : "") ;
+	
 #ifdef _DEBUG
-  fprintf(stderr,"host=(%s), port=%d, filename=(%s)\n",
-	    http_server,http_port,*pfilename);
+	fprintf(stderr,"host=(%s), port=%d, filename=(%s)\n",
+	http_server,http_port,*pfilename);
 #endif
-  return OK0;
+	return OK0;
 }
 
 /*
@@ -186,30 +185,30 @@ http_proxy_url(char *proxy)
  *
  * limitations: filename is truncated to first 256 characters 
  *              and type to 64.
+ *	char *filename	name of the ressource to create 
+ *	char *data	pointer to the data to send
+ *	int length	length of the data to send 
+ *	int overwrite	flag to request to overwrite the ressource if it
+ *			 was already existing 
+ *	char *type	type of the data, if NULL default type is used
  */
 extern http_retcode
-http_put(filename, data, length, overwrite, type) 
-     char *filename;  /* name of the ressource to create */
-     char *data;      /* pointer to the data to send   */
-     int length;      /* length of the data to send  */
-     int overwrite;   /* flag to request to overwrite the ressource if it
-			 was already existing */
-     char *type;      /* type of the data, if NULL default type is used */
+http_put(char *filename, char *data, int length, int overwrite, char *type) 
 {
-  char header[MAXBUF];
-  if (type) 
-    sprintf(header,"Content-length: %d\015\012Content-type: %.64s\015\012%s",
-	    length,
-	    type  ,
-	    overwrite ? "Control: overwrite=1\015\012" : ""
-	    );
-  else
-    sprintf(header,"Content-length: %d\015\012%s",length,
-	    overwrite ? "Control: overwrite=1\015\012" : ""
-	    );
-  return http_query("PUT",filename,header,CLOSE, data, length, NULL);
+	char header[MAXBUF];
+	if (type) 
+		sprintf(header,"Content-length: %d\015\012Content-type: %.64s\015\012%s",
+			length,
+			type  ,
+			overwrite ? "Control: overwrite=1\015\012" : ""
+			);
+	else
+		sprintf(header,"Content-length: %d\015\012%s",length,
+			overwrite ? "Control: overwrite=1\015\012" : ""
+			);
+	return http_query("PUT",filename,header,CLOSE, data, length, NULL);
 }
-
+	
 /*
  * Get data from the server
  *
@@ -220,123 +219,123 @@ http_put(filename, data, length, overwrite, type)
  * 
  * returns a negative error code or a positive code from the server
  * 
+ *	char *filename	name of the ressource to read 
+ *	char **pdata	address of a pointer variable which will be set
+ *			to point toward allocated memory containing read data.
+ *	int  *plength	address of integer variable which will be set to
+ *			length of the cead data 
+ *	char *typebuf	allocated buffer where the read data type is returned.
+ *			If NULL, the type is not returned
+ *	 
  *
  * limitations: filename is truncated to first 256 characters
  */
 extern http_retcode
-http_get(filename, pdata, plength, typebuf) 
-     char *filename; /* name of the ressource to read */
-     char **pdata; /* address of a pointer variable which will be set
-		      to point toward allocated memory containing read data.*/
-     int  *plength;/* address of integer variable which will be set to
-		      length of the read data */
-     char *typebuf; /* allocated buffer where the read data type is returned.
-		    If NULL, the type is not returned */
-     
+http_get(char *filename, char **pdata, int *plength, char *typebuf) 
 {
-  http_retcode ret;
-  
-  char header[MAXBUF];
-  char *pc;
-  int  fd;
-  int  n,length=-1;
-
-  if (!pdata) return ERRNULL; else *pdata=NULL;
-  if (plength) *plength=0;
-  if (typebuf) *typebuf='\0';
-
-  ret=http_query("GET",filename,"",KEEP_OPEN, NULL, 0, &fd);
-  if (ret==OK200) {
-    while (1) {
-      n=http_read_line(fd,header,MAXBUF-1);
+	http_retcode ret;
+	 
+	char header[MAXBUF];
+	char *pc;
+	int  fd;
+	int  n,length=-1;
+	
+	if (!pdata) return ERRNULL; else *pdata=NULL;
+	if (plength) *plength=0;
+	if (typebuf) *typebuf='\0';
+	
+	ret=http_query("GET",filename,"",KEEP_OPEN, NULL, 0, &fd);
+	if (ret==OK200) {
+		while (1) {
+			n=http_read_line(fd,header,MAXBUF-1);
 #ifdef _DEBUG
-      fputs(header,stderr);
-      putc('\n',stderr);
+			fputs(header,stderr);
+			putc('\n',stderr);
 #endif	
-      if (n<=0) {
-	close(fd);
-	return ERRRDHD;
-      }
-      /* empty line ? (=> end of header) */
-      if ( n>0 && (*header)=='\0') break;
-      /* try to parse some keywords : */
-      /* convert to lower case 'till a : is found or end of string */
-      for (pc=header; (*pc!=':' && *pc) ; pc++) *pc=tolower(*pc);
-      sscanf(header,"content-length: %d",&length);
-      if (typebuf) sscanf(header,"content-type: %s",typebuf);
-    }
-    if (length<=0) {
-      close(fd);
-      return ERRNOLG;
-    }
-    if (plength) *plength=length;
-    if (!(*pdata=malloc(length))) {
-      close(fd);
-      return ERRMEM;
-    }
-    n=http_read_buffer(fd,*pdata,length);
-    close(fd);
-    if (n!=length) ret=ERRRDDT;
-  } else if (ret>=0) close(fd);
-  return ret;
+			if (n<=0) {
+				close(fd);
+				return ERRRDHD;
+			}
+			/* empty line ? (=> end of header) */
+			if ( n>0 && (*header)=='\0') break;
+			/* try to parse some keywords : */
+			/* convert to lower case 'till a : is found or end of string */
+			for (pc=header; (*pc!=':' && *pc) ; pc++) *pc=tolower(*pc);
+			sscanf(header,"content-length: %d",&length);
+			if (typebuf) sscanf(header,"content-type: %s",typebuf);
+		}
+		if (length<=0) {
+			close(fd);
+			return ERRNOLG;
+		}
+		if (plength) *plength=length;
+		if (!(*pdata=malloc(length))) {
+			close(fd);
+			return ERRMEM;
+		}
+		n=http_read_buffer(fd,*pdata,length);
+		close(fd);
+		if (n!=length) ret=ERRRDDT;
+	} else if (ret>=0) close(fd);
+	return ret;
 }
-
+	
 /*
- * Request the header
- *
- * This function outputs the header of thehttp data server.
- * The header is from the ressource named filename.
- * The length and type of data is eventually returned (like for http_get(3))
- *
- * returns a negative error code or a positive code from the server
- * 
- * limitations: filename is truncated to first 256 characters
- */
+* Request the header
+*
+* This function outputs the header of thehttp data server.
+* The header is from the ressource named filename.
+* The length and type of data is eventually returned (like for http_get(3))
+*
+* returns a negative error code or a positive code from the server
+* 
+*	char *filename	name of the ressource to read 
+*	int  *plength	address of integer variable which will be set to
+*			length of the data
+*	char *typebuf	allocated buffer where the data type is returned.
+*			If NULL, the type is not returned 
+* limitations: filename is truncated to first 256 characters
+*/
 extern http_retcode
-http_head(filename, plength, typebuf) 
-     char *filename; /* name of the ressource to read */
-     int  *plength;/* address of integer variable which will be set to
-		      length of the data */
-     char *typebuf; /* allocated buffer where the data type is returned.
-		    If NULL, the type is not returned */
+http_head(char *filename, int *plength, char *typebuf) 
 {
 /* mostly copied from http_get : */
-  http_retcode ret;
-  
-  char header[MAXBUF];
-  char *pc;
-  int  fd;
-  int  n,length=-1;
-
-  if (plength) *plength=0;
-  if (typebuf) *typebuf='\0';
-
-  ret=http_query("HEAD",filename,"",KEEP_OPEN, NULL, 0, &fd);
-  if (ret==OK200) {
-    while (1) {
-      n=http_read_line(fd,header,MAXBUF-1);
+	http_retcode ret;
+	 
+	char header[MAXBUF];
+	char *pc;
+	int  fd;
+	int  n,length=-1;
+	
+	if (plength) *plength=0;
+	if (typebuf) *typebuf='\0';
+	
+	ret=http_query("HEAD",filename,"",KEEP_OPEN, NULL, 0, &fd);
+	if (ret==OK200) {
+		while (1) {
+			n=http_read_line(fd,header,MAXBUF-1);
 #ifdef _DEBUG
-      fputs(header,stderr);
-      putc('\n',stderr);
+			fputs(header,stderr);
+			putc('\n',stderr);
 #endif	
-      if (n<=0) {
-	close(fd);
-	return ERRRDHD;
-      }
-      /* empty line ? (=> end of header) */
-      if ( n>0 && (*header)=='\0') break;
-      /* try to parse some keywords : */
-      /* convert to lower case 'till a : is found or end of string */
-      for (pc=header; (*pc!=':' && *pc) ; pc++) *pc=tolower(*pc);
-      sscanf(header,"content-length: %d",&length);
-      if (typebuf) sscanf(header,"content-type: %s",typebuf);
-    }
-    if (plength) *plength=length;
-    close(fd);
-  } else if (ret>=0) close(fd);
-  return ret;
+			if (n<=0) {
+				close(fd);
+				return ERRRDHD;
+			}
+			/* empty line ? (=> end of header) */
+			if ( n>0 && (*header)=='\0') break;
+			/* try to parse some keywords : */
+			/* convert to lower case 'till a : is found or end of string */
+			for (pc=header; (*pc!=':' && *pc) ; pc++) *pc=tolower(*pc);
+			sscanf(header,"content-length: %d",&length);
+			if (typebuf) sscanf(header,"content-type: %s",typebuf);
+		}
+		if (plength) *plength=length;
+		close(fd);
+	} else if (ret>=0) close(fd);
+	return ret;
 }
-
+	
 /*
  * Delete data on the server
  *
@@ -344,19 +343,19 @@ http_head(filename, plength, typebuf)
  *
  * returns a negative error code or a positive code from the server
  *
+ *	char *filename	name of the ressource to create
  * limitations: filename is truncated to first 256 characters 
  */
-
+	
 extern http_retcode
-http_delete(filename) 
-     char *filename;  /* name of the ressource to create */
+http_delete(char *filename) 
 {
-  return http_query("DELETE",filename,"",CLOSE, NULL, 0, NULL);
+	return http_query("DELETE",filename,"",CLOSE, NULL, 0, NULL);
 }
-
+	
 /*
- * post data
- */
+* post data
+*/
 extern http_retcode
 http_post(char *filename, char *data, int length, char *type, char **pdata, int *plength, char **ptype)
 {
@@ -366,23 +365,23 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 	char header[MAXBUF];
 	char typebuf[MAXBUF];
 	http_retcode ret;
-
+	
 	if (data == NULL || length <= 0 || pdata == NULL || plength == NULL ||
-		ptype == NULL)
+	ptype == NULL)
 		return ERRNULL;
-
+	
 	*pdata = NULL;
 	*plength = 0;
 	*ptype = NULL;
-
+	
 	if (type) 
 		sprintf(header, "Content-length: %d\015\012Content-type: %.64s\015\012",
-	        	length, type);
+			length, type);
 	else
 		sprintf(header, "Content-length: %d\015\012", length);
-
+	
 	ret = http_query("POST", filename, header, KEEP_OPEN, data, length, &fd);
-
+	
 	if (ret==OK200) { 
 		while (1) {
 			n = http_read_line(fd,header,MAXBUF-1);
@@ -393,38 +392,38 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 			if (n<=0) {
 				close(fd);
 				return ERRRDHD;
-      			}
-
-      			/* empty line ? (=> end of header) */
+			}
+	
+			/* empty line ? (=> end of header) */
 			if (n>0 && (*header) =='\0')
 				break;
-
+	
 			/* try to parse some keywords : */
 			/* convert to lower case 'till a : is found or end of string */
 			for (pc=header; (*pc!=':' && *pc) ; pc++) *pc=tolower(*pc);
 			sscanf(header,"content-length: %d",plength);
 			sscanf(header,"content-type: %s", typebuf);
 		}
-
+	
 		*ptype = strdup(typebuf);
-
+		
 		if (*plength<=0) {
 			close(fd);
 			free(*ptype);
 			*ptype = NULL;
 			return OK200; /* XXX: POST didn't return data */
-    		}
-
+		}
+	
 		if (!(*pdata=malloc(*plength))) {
 			close(fd);
-		    	free(*ptype);
+			free(*ptype);
 			*ptype = NULL;
 			return ERRMEM;
 		}
-
+	
 		n=http_read_buffer(fd,*pdata,*plength);
-    		close(fd);
-
+		close(fd);
+	
 		if (n!=*plength) {
 			free(*pdata);
 			*pdata = NULL;
@@ -435,10 +434,10 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 	} else if (ret>=0) {
 		close(fd);
 	}
-
+	
 	return ret;
 }
-
+	
 /*
  * Pseudo general http query
  *
@@ -448,124 +447,131 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
  *
  * Limitations: the url is truncated to first 256 chars and
  * the server name to 128 in case of proxy request.
+ *
+ * char *command		Command to send
+ * char *url;			url / filename queried
+ * char *additional_header	Additional header 
+ * querymode mode; 		Type of query
+ * char *data			Data to send after header. 
+ *				If NULL, not data is sent 
+ * int length			size of data
+ * int *pfd			pointer to variable where to 
+ *				set file descriptor value
  */
-static http_retcode http_query(command, url, additional_header, mode,
-			      data, length, pfd) 
-     char *command;	/* command to send  */
-     char *url;		/* url / filename queried  */
-     char *additional_header;	/* additional header */
-     querymode mode; 		/* type of query */
-     char *data;  /* Data to send after header. If NULL, not data is sent */
-     int length;  /* size of data */
-     int *pfd;    /* pointer to variable where to set file descriptor value */
+static http_retcode
+http_query(char *command, char *url, char *additional_header, 
+	querymode mode, char *data, int length, int *pfd) 
 {
-  int     s;
-  struct  hostent *hp;
-  struct  sockaddr_in     server;
-  char header[MAXBUF];
-  int  hlg;
-  http_retcode ret;
-  int  proxy=(http_proxy_server!=NULL && http_proxy_port!=0);
-  int  port = proxy ? http_proxy_port : http_port ;
-  
-  if (pfd) *pfd=-1;
-
-  /* get host info by name :*/
-  if ((hp = gethostbyname( proxy ? http_proxy_server 
-			         : ( http_server ? http_server 
-				                 : SERVER_DEFAULT )
-                         ))) {
-    memset((char *) &server,0, sizeof(server));
-    memmove((char *) &server.sin_addr, hp->h_addr, hp->h_length);
-    server.sin_family = hp->h_addrtype;
-    server.sin_port = (unsigned short) htons( port );
-  } else
-    return ERRHOST;
-
-  /* create socket */
-  if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    return ERRSOCK;
-  setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, 0, 0);
-
-  /* connect to server */
-  if (connect(s, &server, sizeof(server)) < 0) 
-    ret=ERRCONN;
-  else {
-    if (pfd) *pfd=s;
-    
-    /* create header */
-    if (proxy) {
-	if (http_basic_auth) {
-      sprintf(header,
-"%s http://%.128s:%d/%.256s HTTP/1.0\015\012User-Agent: %s\015\012Authorization: Basic %s\015\012%s\015\012",
-	      command,
-	      http_server,
-	      http_port,
-	      url,
-	      http_user_agent,
-		http_basic_auth,
-	      additional_header
-	      );
-	} else {
-      sprintf(header,
-"%s http://%.128s:%d/%.256s HTTP/1.0\015\012User-Agent: %s\015\012%s\015\012",
-	      command,
-	      http_server,
-	      http_port,
-	      url,
-	      http_user_agent,
-	      additional_header
-	      );
-	}
-    } else {
-	if (http_basic_auth) {
-      sprintf(header,
-"%s /%.256s HTTP/1.0\015\012User-Agent: %s\015\012Authorization: Basic %s\015\012%s\015\012",
-	      command,
-	      url,
-	      http_user_agent,
-		http_basic_auth,
-	      additional_header
-	      );
-	} else {
-      sprintf(header,
-"%s /%.256s HTTP/1.0\015\012User-Agent: %s\015\012%s\015\012",
-	      command,
-	      url,
-	      http_user_agent,
-	      additional_header
-	      );
-	}
-    }
-
-    hlg=strlen(header);
-
+	int     s;
+	struct  hostent *hp;
+	struct  sockaddr_in     server;
+	char header[MAXBUF];
+	int  hlg;
+	http_retcode ret;
+	int  proxy=(http_proxy_server!=NULL && http_proxy_port!=0);
+	int  port = proxy ? http_proxy_port : http_port ;
+	 
+	if (pfd) *pfd=-1;
+	
+	/* get host info by name :*/
+	if ((hp = gethostbyname( proxy ? http_proxy_server 
+		: ( http_server ? http_server 
+		: SERVER_DEFAULT )
+		))) {
+		memset((char *) &server,0, sizeof(server));
+		memmove((char *) &server.sin_addr, hp->h_addr, hp->h_length);
+		server.sin_family = hp->h_addrtype;
+		server.sin_port = (unsigned short) htons( port );
+	} else
+		return ERRHOST;
+	
+	/* create socket */
+	if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+		return ERRSOCK;
+	setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, 0, 0);
+	
+	/* connect to server */
+	if (connect(s, &server, sizeof(server)) < 0) 
+		ret=ERRCONN;
+	else {
+		if (pfd) *pfd=s;
+	 
+		/* create header */
+		if (proxy) {
+			if (http_basic_auth) {
+			sprintf(header,
+				"%s http://%.128s:%d/%.256s HTTP/1.0\015\012User-Agent: %s\015\012"
+				"Authorization: Basic %s\015\012%s\015\012",
+				command,
+				http_server,
+				http_port,
+				url,
+				http_user_agent,
+				http_basic_auth,
+				additional_header
+				);
+			} else {
+				sprintf(header,
+					"%s http://%.128s:%d/%.256s HTTP/1.0\015\012"
+					"User-Agent: %s\015\012%s\015\012",
+					command,
+					http_server,
+					http_port,
+					url,
+					http_user_agent,
+					additional_header
+				       );
+			}
+		} else {
+			if (http_basic_auth) {
+				sprintf(header,
+					"%s /%.256s HTTP/1.0\015\012User-Agent: %s\015\012"
+					"Authorization: Basic %s\015\012%s\015\012",
+					command,
+					url,
+					http_user_agent,
+					http_basic_auth,
+					additional_header
+					);
+			} else {
+				sprintf(header,
+					"%s /%.256s HTTP/1.0\015\012User-Agent: %s\015\012%s\015\012",
+					command,
+					url,
+					http_user_agent,
+					additional_header
+					);
+			}
+		}
+	
+		hlg=strlen(header);
+		
 #ifdef _DEBUG
-      fputs(header,stderr);
-      putc('\n',stderr);
+		fputs(header,stderr);
+		putc('\n',stderr);
 #endif	
+	
+		/* send header */
+		if (write(s,header,hlg)!=hlg) {
+			ret= ERRWRHD;
+			/* send data */
+		} else if (length && data && (write(s,data,length)!=length) ) {
+			ret= ERRWRDT;
+		} else {
+			/* read result & check */
+			ret=http_read_line(s,header,MAXBUF-1);
 
-    /* send header */
-    if (write(s,header,hlg)!=hlg) {
-      ret= ERRWRHD;
-    /* send data */
-    } else if (length && data && (write(s,data,length)!=length) ) {
-      ret= ERRWRDT;
-    } else {
-      /* read result & check */
-      ret=http_read_line(s,header,MAXBUF-1);
-
-      if (ret<=0) 
-	ret=ERRRDHD;
-      else if (sscanf(header,"HTTP/1.%*d %03d",(int*)&ret)!=1) 
-	  ret=ERRPAHD;
-      else if (mode==KEEP_OPEN)
+			if (ret<=0) 
+				ret=ERRRDHD;
+			else if (sscanf(header,"HTTP/1.%*d %03d",(int*)&ret)!=1) 
+				ret=ERRPAHD;
+			else if (mode==KEEP_OPEN)
+				return ret;
+		}
+	}
+	/* close socket */
+	close(s);
 	return ret;
-    }
-  }
-  /* close socket */
-  close(s);
-  return ret;
 }
 
 /*
@@ -573,25 +579,26 @@ static http_retcode http_query(command, url, additional_header, mode,
  * returns the number of bytes read. negative if a read error occured
  * before the end of line or the max.
  * cariage returns (CR) are ignored.
+ * 	int fd		File descriptor to read from
+ * 	char *buffer	Placeholder for data
+ *	int max		Max number of bytes to read
  */
-static int http_read_line (fd,buffer,max) 
-     int fd; /* file descriptor to read from */
-     char *buffer; /* placeholder for data */
-     int max; /* max number of bytes to read */
-{ /* not efficient on long lines (multiple unbuffered 1 char reads) */
-  int n=0;
-  while (n<max) {
-    if (read(fd,buffer,1)!=1) {
-      n= -n;
-      break;
-    }
-    n++;
-    if (*buffer=='\015') continue; /* ignore CR */
-    if (*buffer=='\012') break;    /* LF is the separator */
-    buffer++;
-  }
-  *buffer=0;
-  return n;
+static int http_read_line (int fd, char *buffer, int max) 
+{ 
+	/* not efficient on long lines (multiple unbuffered 1 char reads) */
+	int n=0;
+	while (n<max) {
+		if (read(fd,buffer,1)!=1) {
+			n= -n;
+			break;
+		}
+		n++;
+		if (*buffer=='\015') continue; /* ignore CR */
+		if (*buffer=='\012') break;    /* LF is the separator */
+		buffer++;
+	}
+	*buffer=0;
+	return n;
 }
 
 /*
@@ -599,19 +606,21 @@ static int http_read_line (fd,buffer,max)
  * retries reading until the number of bytes requested is read.
  * returns the number of bytes read. negative if a read error (EOF) occured
  * before the requested length.
+ *
+ *	int fd		file descriptor to read from
+ *	char *buffer	placeholder for data
+ *	int length	number of bytes to read
  */
-static int http_read_buffer (fd,buffer,length) 
-     int fd;  /* file descriptor to read from */
-     char *buffer; /* placeholder for data */
-     int length; /* number of bytes to read */
+static int 
+http_read_buffer (int fd, char *buffer, int length) 
 {
-  int n,r;
-  for (n=0; n<length; n+=r) {
-    r=read(fd,buffer,length-n);
-    if (r<=0) return -n;
-    buffer+=r;
-  }
-  return n;
+	int n,r;
+	for (n=0; n<length; n+=r) {
+		r=read(fd,buffer,length-n);
+		if (r<=0) return -n;
+		buffer+=r;
+	}
+	return n;
 }
 
 /**
@@ -645,6 +654,6 @@ http_set_basic_auth(char *user, char *pass)
 		free(http_basic_auth);
 
 	http_basic_auth = b64;
-	
+
 	return r;
 }
