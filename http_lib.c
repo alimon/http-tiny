@@ -11,6 +11,10 @@
  * Description : Use http protocol, connects to server to echange data
  *
  * Revision 3.6.x 2013/08/07 21:41:42 -0500
+ * Added support for read Content without length in GET/POST.
+ * Author: alimon <limon.anibal@gmail.com>
+ *
+ * Revision 3.6.x 2013/08/07 21:41:42 -0500
  * Added Basic auth support, base64 encoding is provided for external
  * function trought http_set_base64_encoder.
  * Author: alimon <limon.anibal@gmail.com>
@@ -79,6 +83,7 @@ static http_retcode http_query(char *command, char *url,
 		 		char* data, int length, int *pfd);
 static int http_read_line (int fd,char *buffer, int max) ;
 static int http_read_buffer (int fd,char *buffer, int max) ;
+static int http_read_buffer_eof (int fd, char **buffer, int *length);
 
 /* pointer to a mallocated string containing server name or NULL */
 static char *http_server=NULL ;
@@ -264,19 +269,25 @@ http_get(char *filename, char **pdata, int *plength, char *typebuf)
 			sscanf(header,"content-length: %d",&length);
 			if (typebuf) sscanf(header,"content-type: %s",typebuf);
 		}
+
 		if (length<=0) {
+			if (http_read_buffer_eof(fd, pdata, plength) == -1)
+				ret = ERRNOLG;
 			close(fd);
-			return ERRNOLG;
-		}
-		if (plength) *plength=length;
-		if (!(*pdata=malloc(length))) {
+		} else {
+			*plength=length;
+			if (!(*pdata=malloc(length))) {
+				close(fd);
+				return ERRMEM;
+			}
+			n=http_read_buffer(fd,*pdata,length);
 			close(fd);
-			return ERRMEM;
+			if (n!=length) ret=ERRRDDT;
 		}
-		n=http_read_buffer(fd,*pdata,length);
+	} else if (ret>=OK0) {
 		close(fd);
-		if (n!=length) ret=ERRRDDT;
-	} else if (ret>=0) close(fd);
+	}
+
 	return ret;
 }
 	
@@ -332,7 +343,9 @@ http_head(char *filename, int *plength, char *typebuf)
 		}
 		if (plength) *plength=length;
 		close(fd);
-	} else if (ret>=0) close(fd);
+	} else if (ret>=OK0) {
+		close(fd);
+	}
 	return ret;
 }
 	
@@ -365,7 +378,7 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 	char header[MAXBUF];
 	char typebuf[MAXBUF];
 	http_retcode ret;
-	
+
 	if (data == NULL || length <= 0 || pdata == NULL || plength == NULL ||
 	ptype == NULL)
 		return ERRNULL;
@@ -373,6 +386,9 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 	*pdata = NULL;
 	*plength = 0;
 	*ptype = NULL;
+
+	header[0] = '\0';	
+	typebuf[0] = '\0';
 	
 	if (type) 
 		sprintf(header, "Content-length: %d\015\012Content-type: %.64s\015\012",
@@ -408,30 +424,32 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 		*ptype = strdup(typebuf);
 		
 		if (*plength<=0) {
+			if (http_read_buffer_eof(fd,pdata,plength) == -1)
+				ret = ERRNOLG;
+
 			close(fd);
 			free(*ptype);
 			*ptype = NULL;
-			return OK200; /* XXX: POST didn't return data */
-		}
+		} else {
+			if (!(*pdata=malloc(*plength))) {
+				close(fd);
+				free(*ptype);
+				*ptype = NULL;
+				return ERRMEM;
+			}
 	
-		if (!(*pdata=malloc(*plength))) {
+			n=http_read_buffer(fd,*pdata,*plength);
 			close(fd);
-			free(*ptype);
-			*ptype = NULL;
-			return ERRMEM;
-		}
 	
-		n=http_read_buffer(fd,*pdata,*plength);
-		close(fd);
-	
-		if (n!=*plength) {
-			free(*pdata);
-			*pdata = NULL;
-			free(*ptype);
-			*ptype = NULL;
-			ret=ERRRDDT;
+			if (n!=*plength) {
+				free(*pdata);
+				*pdata = NULL;
+				free(*ptype);
+				*ptype = NULL;
+				ret=ERRRDDT;
+			}
 		}
-	} else if (ret>=0) {
+	} else if (ret>=OK0) {
 		close(fd);
 	}
 	
@@ -621,6 +639,63 @@ http_read_buffer (int fd, char *buffer, int length)
 		buffer+=r;
 	}
 	return n;
+}
+
+/*
+ * read data from file descriptor
+ * retries reading until the number of bytes requested is read.
+ * returns the number of bytes read or -1 if fails
+ *
+ *	int fd		file descriptor to read from
+ *	char **pbuffer	placeholder for return data
+ *	int *plength	number of bytes read
+ */
+static int 
+http_read_buffer_eof (int fd, char **pbuffer, int *plength) 
+{
+	int r = 0;
+	static int page_size = 0;
+	void *data;
+	int size = 0;
+
+	if (page_size == 0) 
+		page_size = sysconf(_SC_PAGESIZE);
+
+#ifdef _DEBUG
+	printf("page_size: %d\n", page_size);
+#endif
+
+	*pbuffer = NULL;
+	*plength = 0;
+
+	do {
+		if (*plength >= size) {
+			size += page_size;
+			data = realloc(*pbuffer, size);
+			if (data == NULL) {
+				r = -1;
+				free(*pbuffer);
+				*plength = 0;
+				break;
+			} else {
+				*pbuffer = data;
+			}
+		}
+
+		r = read(fd, *pbuffer + *plength, page_size);
+
+		if (r == -1) {
+			free(*pbuffer);
+			*plength = 0;
+			break;
+		} else if (r == 0) {
+			break;	
+		} else {
+			*plength += r;
+		}
+	} while (1);
+
+	return r;
 }
 
 /**
