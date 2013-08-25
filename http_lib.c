@@ -65,6 +65,8 @@ static char *rcsid="$Id: http_lib.c,v 3.5 1998/09/23 06:19:15 dl Exp $";
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <errno.h>
+
 #include "http_lib.h"
 
 #define SERVER_DEFAULT "adonis"
@@ -379,13 +381,11 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 	char typebuf[MAXBUF];
 	http_retcode ret;
 
-	if (data == NULL || length <= 0 || pdata == NULL || plength == NULL ||
-	ptype == NULL)
+	if (data == NULL || length <= 0 || pdata == NULL || plength == NULL)
 		return ERRNULL;
 	
 	*pdata = NULL;
 	*plength = 0;
-	*ptype = NULL;
 
 	header[0] = '\0';	
 	typebuf[0] = '\0';
@@ -421,20 +421,24 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 			sscanf(header,"content-type: %s", typebuf);
 		}
 	
-		*ptype = strdup(typebuf);
+		if (ptype) *ptype = strdup(typebuf);
 		
 		if (*plength<=0) {
 			if (http_read_buffer_eof(fd,pdata,plength) == -1)
 				ret = ERRNOLG;
 
 			close(fd);
-			free(*ptype);
-			*ptype = NULL;
+			if (ptype) {
+				free(*ptype);
+				*ptype = NULL;
+			}
 		} else {
 			if (!(*pdata=malloc(*plength))) {
 				close(fd);
-				free(*ptype);
-				*ptype = NULL;
+				if (ptype) {
+					free(*ptype);
+					*ptype = NULL;
+				}
 				return ERRMEM;
 			}
 	
@@ -444,8 +448,10 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 			if (n!=*plength) {
 				free(*pdata);
 				*pdata = NULL;
-				free(*ptype);
-				*ptype = NULL;
+				if (ptype) {
+					free(*ptype);
+					*ptype = NULL;
+				}
 				ret=ERRRDDT;
 			}
 		}
@@ -655,6 +661,7 @@ http_read_buffer_eof (int fd, char **pbuffer, int *plength)
 {
 	int r = 0;
 	static int page_size = 0;
+	int to_read;
 	void *data;
 	int size = 0;
 
@@ -682,11 +689,16 @@ http_read_buffer_eof (int fd, char **pbuffer, int *plength)
 			}
 		}
 
-		r = read(fd, *pbuffer + *plength, page_size);
+		to_read = -1 * ((*plength % page_size) - page_size);
+		r = read(fd, *pbuffer + *plength, to_read);
 
 		if (r == -1) {
-			free(*pbuffer);
-			*plength = 0;
+			if (errno == ECONNRESET) {
+				r = 0;
+			} else {
+				free(*pbuffer);
+				*plength = 0;
+			}
 			break;
 		} else if (r == 0) {
 			break;	
