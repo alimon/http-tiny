@@ -10,7 +10,7 @@
  *
  * Description : Use http protocol, connects to server to echange data
  *
- * Revision 3.6.x 2013/08/07 21:41:42 -0500
+ * Revision 3.6.x 2013/08/23 20:41:42 -0500
  * Added support for read Content without length in GET/POST.
  * Author: alimon <limon.anibal@gmail.com>
  *
@@ -424,14 +424,15 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 		if (ptype) *ptype = strdup(typebuf);
 		
 		if (*plength<=0) {
-			if (http_read_buffer_eof(fd,pdata,plength) == -1)
+			if (http_read_buffer_eof(fd,pdata,plength) == -1) {
 				ret = ERRNOLG;
+				if (ptype) {
+					free(*ptype);
+					*ptype = NULL;
+				}
+            }
 
 			close(fd);
-			if (ptype) {
-				free(*ptype);
-				*ptype = NULL;
-			}
 		} else {
 			if (!(*pdata=malloc(*plength))) {
 				close(fd);
