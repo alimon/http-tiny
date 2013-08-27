@@ -9,6 +9,7 @@ http\_set\_base64\_encoder.
 
 - http\_post added
 - http\_set\_basic\_auth added
+- http_read_buffer_eof (GET/POST support for read without Content length header field) 
 
 TODO
 
