@@ -47,21 +47,42 @@ typedef enum {
 
 } http_retcode;
 
+/* CTX */
+typedef struct _http_ctx {
+	char *server;
+	int port;
+	char *proxy_server;
+	int proxy_port;
 
-/* prototypes */
+	http_base64_encoder b64_enc;
+	char *b64_auth;
+} http_ctx;
+
+/* Functions */
 extern http_retcode http_parse_url(char *url, char **pfilename);
 extern http_retcode http_proxy_url(char *url);
-
 extern http_retcode http_put(char *filename, char *data, int length, 
-	     int overwrite, char *type) ;
-extern http_retcode http_get(char *filename, char **pdata,int *plength, char *typebuf);
-
-extern http_retcode http_delete(char *filename) ;
-
+			int overwrite, char *type);
+extern http_retcode http_get(char *filename, char **pdata,int *plength,
+			char *typebuf);
+extern http_retcode http_delete(char *filename);
 extern http_retcode http_head(char *filename, int *plength, char *typebuf);
-
-extern http_retcode http_post(char *filename, char *data, int length, char *type, char **pdata, int *plength, char **ptype);
-
+extern http_retcode http_post(char *filename, char *data, int length,
+			char *type, char **pdata, int *plength, char **ptype);
 extern void http_set_base64_encoder(http_base64_encoder enc);
-
 extern http_retcode http_set_basic_auth(char *user, char *pass);
+
+/* Multi-thread functions */
+extern http_retcode httpmt_parse_url(http_ctx *ctx, char *url, char **pfilename);
+extern http_retcode httpmt_proxy_url(http_ctx *ctx, char *url);
+extern http_retcode httpmt_put(http_ctx *ctx, char *filename, char *data, int length, 
+		int overwrite, char *type);
+extern http_retcode httpmt_get(http_ctx *ctx, char *filename, char **pdata,
+		int *plength, char *typebuf);
+extern http_retcode httpmt_delete(http_ctx *ctx, char *filename);
+extern http_retcode httpmt_head(http_ctx *ctx, char *filename, int *plength,
+		char *typebuf);
+extern http_retcode httpmt_post(http_ctx *ctx, char *filename, char *data, int length,
+		char *type, char **pdata, int *plength, char **ptype);
+extern void httpmt_set_base64_encoder(http_ctx *ctx, http_base64_encoder enc);
+extern http_retcode httpmt_set_basic_auth(http_ctx *ctx, char *user, char *pass);

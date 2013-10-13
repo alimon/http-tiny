@@ -138,6 +138,7 @@ int main(int argc,char* argv[])
 		ret=http_get(filename,&data,&lg,typebuf);
 		fprintf(stderr,"res=%d,type='%s',lg=%d\n",ret,typebuf,lg);
 		fwrite(data,lg,1,stdout);
+		fprintf(stderr, "%s\n", data);
 		break;
 	/* *** HEAD  *** */
 	case DOHEA:
@@ -153,7 +154,7 @@ int main(int argc,char* argv[])
 		ret = http_post(filename, "your_name=1", 11, NULL, &data, &data_len, &type);
 		fprintf(stderr,"res=%d\n",ret);
 		fprintf(stderr,"%s\n", type);
-		fprintf(stderr,"%s\n", data);
+		fprintf(stderr,"data: %s\n", data);
 		break;
 	/* impossible... */
 	default:

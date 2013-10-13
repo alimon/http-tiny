@@ -25,12 +25,10 @@ INCDIR=$(prefix)/include
 # Your compiler
 CC = gcc
 # Compile flags
-CDEBUGFLAGS = -O -Wmissing-prototypes -Wall -ansi -pedantic
-#CDEBUGFLAGS = -O
+CDEBUGFLAGS = -O -Wall # -g
 
-# defines (needed for string ops on linux2/glibc for instance), remove
-# _DEBUG for production:
-DEFINES= -D_XOPEN_SOURCE -D_XOPEN_SOURCE_EXTENDED -D_GNU_SOURCE -D_DEBUG
+# defines (needed for string ops on linux2/glibc for instance)
+DEFINES= -D_XOPEN_SOURCE -D_XOPEN_SOURCE_EXTENDED -D_GNU_SOURCE #-D_DEBUG
 
 # for HPUX (ansi)
 #DEFINES= -D_HPUX_SOURCE

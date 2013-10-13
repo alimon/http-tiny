@@ -10,6 +10,10 @@
  *
  * Description : Use http protocol, connects to server to echange data
  *
+ * Revision 4.0 2013/10/13 13:15:00 -0500
+ * Added functions for multi-thread support httpmt_.
+ * Author: alimon <limon.anibal@gmail.com>
+ *
  * Revision 3.6.x 2013/08/23 20:41:42 -0500
  * Added support for read Content without length in GET/POST.
  * Author: alimon <limon.anibal@gmail.com>
@@ -50,7 +54,9 @@
  *
  */
 
+#ifdef _bsd
 static char *rcsid="$Id: http_lib.c,v 3.5 1998/09/23 06:19:15 dl Exp $";
+#endif
 
 /* http_lib - Http data exchanges mini library.
  */
@@ -80,26 +86,25 @@ typedef enum
 	KEEP_OPEN /* Keep it open */
 } querymode;
 
-static http_retcode http_query(char *command, char *url,
+static http_retcode http_query(http_ctx *ctx, char *command, char *url,
 			 	char *additional_header, querymode mode, 
-		 		char* data, int length, int *pfd);
-static int http_read_line (int fd,char *buffer, int max) ;
-static int http_read_buffer (int fd,char *buffer, int max) ;
-static int http_read_buffer_eof (int fd, char **buffer, int *length);
+		 		char *data, int length, int *pfd);
+static int http_read_line(int fd, char *buffer, int max);
+static int http_read_buffer(int fd, char *buffer, int max);
+static int http_read_buffer_eof(int fd, char **buffer, int *length);
 
-/* pointer to a mallocated string containing server name or NULL */
-static char *http_server=NULL ;
-/* server port number */
-static int http_port=5757;
-/* pointer to proxy server name or NULL */
-static char *http_proxy_server=NULL;
-/* proxy server port number or 0 */
-static int http_proxy_port=0;
 /* user agent id string */
 static char *http_user_agent="adlib/3 ($Date: 1998/09/23 06:19:15 $)";
-/* base auth stuff */
-static http_base64_encoder http_b64_enc = NULL;
-static char *http_basic_auth = NULL;
+
+static http_ctx _ctx = {
+	.server = NULL,
+	.port = 5757,
+	.proxy_server = NULL,
+	.proxy_port = 0,
+
+	.b64_enc = NULL,
+	.b64_auth = NULL
+};
 
 /* parses an url : setting the http_server and http_port global variables
  * and returning the filename to pass to http_get/put/...
@@ -114,44 +119,65 @@ static char *http_basic_auth = NULL;
 extern http_retcode
 http_parse_url(char *url, char **pfilename)
 {
-	char *pc,c;
-  
-	http_port=80;
-	if (http_server) {
-		free(http_server);
-		http_server=NULL;
+	return httpmt_parse_url(&_ctx, url, pfilename);
+}
+
+extern http_retcode
+httpmt_parse_url(http_ctx *ctx, char *url, char **pfilename)
+{
+	char *pc, c;
+
+	if (ctx == NULL)
+		return ERRNULL;
+
+	ctx->port = 80;
+	if (ctx->server) {
+		free(ctx->server);
+		ctx->server = NULL;
 	}
 	if (*pfilename) {
 		free(*pfilename);
-		*pfilename=NULL;
+		*pfilename = NULL;
 	}
 	 
-	if (strncasecmp("http://",url,7)) {
+	if (strncasecmp("http://", url, 7)) {
 #ifdef _DEBUG
 		fprintf(stderr,"invalid url (must start with 'http://')\n");
 #endif
 		return ERRURLH;
 	}
-	url+=7;
-	for (pc=url,c=*pc; (c && c!=':' && c!='/');) c=*pc++;
-	*(pc-1)=0;
-	if (c==':') {
-		if (sscanf(pc,"%d",&http_port)!=1) {
+
+	url += 7;
+	for (pc = url, c = *pc; (c && c != ':' && c != '/');)
+		c = *pc++;
+	*(pc - 1) = 0;
+
+	if (c == ':') {
+		if (sscanf(pc, "%d", &ctx->port) != 1) {
 #ifdef _DEBUG
 			fprintf(stderr,"invalid port in url\n");
 #endif
 			return ERRURLP;
 		}
-		for (pc++; (*pc && *pc!='/') ; pc++) ;
+
+		for (pc++; (*pc && *pc != '/'); pc++);
 		if (*pc) pc++;
 	}
 
-	http_server=strdup(url);
-	*pfilename= strdup ( c ? pc : "") ;
+	ctx->server = strdup(url);
+	if (ctx->server == NULL) 
+		return ERRMEM;
+
+	*pfilename = strdup(c ? pc : "");
+	if (*pfilename == NULL) {
+		free(ctx->server);
+		ctx->server = NULL;
+		return ERRMEM;
+	}
 	
 #ifdef _DEBUG
 	fprintf(stderr,"host=(%s), port=%d, filename=(%s)\n",
-	http_server,http_port,*pfilename);
+		ctx->server, ctx->port, *pfilename);
 #endif
 	return OK0;
 }
@@ -162,21 +188,30 @@ http_parse_url(char *url, char **pfilename)
 extern http_retcode
 http_proxy_url(char *proxy)
 {
+	return httpmt_proxy_url(&_ctx, proxy);
+}
+
+extern http_retcode
+httpmt_proxy_url(http_ctx *ctx, char *proxy)
+{
 	http_retcode r = OK0;
 	char *filename = NULL;
 
-	r = http_parse_url(proxy, &filename);
+	if (ctx == NULL)
+		return ERRNULL;
+
+	r = httpmt_parse_url(ctx, proxy, &filename);
 	if (r < 0)
 		return r;
 
-	if (http_proxy_server) {
-		free(http_proxy_server);
-		http_proxy_server = NULL;
+	if (ctx->proxy_server) {
+		free(ctx->proxy_server);
+		ctx->proxy_server = NULL;
 	}
 
-	http_proxy_server = http_server;
-	http_server = NULL;
-	http_proxy_port = http_port;
+	ctx->proxy_server = ctx->server;
+	ctx->server = NULL;
+	ctx->proxy_port = ctx->port;
 
 	free(filename);
 
@@ -202,7 +237,17 @@ http_proxy_url(char *proxy)
 extern http_retcode
 http_put(char *filename, char *data, int length, int overwrite, char *type) 
 {
+	return httpmt_put(&_ctx, filename, data, length, overwrite, type);
+}
+
+extern http_retcode
+httpmt_put(http_ctx *ctx, char *filename, char *data, int length, int overwrite, char *type) 
+{
 	char header[MAXBUF];
+
+	if (ctx == NULL)
+		return ERRNULL;
+
 	if (type) 
 		sprintf(header,"Content-length: %d\015\012Content-type: %.64s\015\012%s",
 			length,
@@ -213,7 +258,8 @@ http_put(char *filename, char *data, int length, int overwrite, char *type)
 		sprintf(header,"Content-length: %d\015\012%s",length,
 			overwrite ? "Control: overwrite=1\015\012" : ""
 			);
-	return http_query("PUT",filename,header,CLOSE, data, length, NULL);
+
+	return http_query(ctx, "PUT", filename, header, CLOSE, data, length, NULL);
 }
 	
 /*
@@ -240,53 +286,69 @@ http_put(char *filename, char *data, int length, int overwrite, char *type)
 extern http_retcode
 http_get(char *filename, char **pdata, int *plength, char *typebuf) 
 {
+	return httpmt_get(&_ctx, filename, pdata, plength, typebuf);
+}
+
+extern http_retcode
+httpmt_get(http_ctx *ctx, char *filename, char **pdata, int *plength, char *typebuf) 
+{
 	http_retcode ret;
 	 
 	char header[MAXBUF];
 	char *pc;
-	int  fd;
-	int  n,length=-1;
+	int fd;
+	int n, length = -1;
+
+	if (ctx == NULL)
+		return ERRNULL;
 	
-	if (!pdata) return ERRNULL; else *pdata=NULL;
-	if (plength) *plength=0;
-	if (typebuf) *typebuf='\0';
+	if (!pdata)
+		return ERRNULL;
+	else
+		*pdata = NULL;
+
+	if (plength) *plength = 0;
+	if (typebuf) *typebuf = '\0';
 	
-	ret=http_query("GET",filename,"",KEEP_OPEN, NULL, 0, &fd);
-	if (ret==OK200) {
+	ret = http_query(ctx, "GET", filename, "", KEEP_OPEN, NULL, 0, &fd);
+	if (ret == OK200) {
 		while (1) {
-			n=http_read_line(fd,header,MAXBUF-1);
+			n = http_read_line(fd, header , MAXBUF - 1);
 #ifdef _DEBUG
-			fputs(header,stderr);
-			putc('\n',stderr);
+			fputs(header, stderr);
+			putc('\n', stderr);
 #endif	
-			if (n<=0) {
+			if (n <= 0) {
 				close(fd);
 				return ERRRDHD;
 			}
 			/* empty line ? (=> end of header) */
-			if ( n>0 && (*header)=='\0') break;
+			if (n > 0 && (*header) == '\0') break;
 			/* try to parse some keywords : */
 			/* convert to lower case 'till a : is found or end of string */
-			for (pc=header; (*pc!=':' && *pc) ; pc++) *pc=tolower(*pc);
-			sscanf(header,"content-length: %d",&length);
-			if (typebuf) sscanf(header,"content-type: %s",typebuf);
+			for (pc = header; (*pc != ':' && *pc); pc++)
+				*pc = tolower(*pc);
+			sscanf(header, "content-length: %d", &length);
+			if (typebuf)
+				sscanf(header, "content-type: %s", typebuf);
 		}
 
-		if (length<=0) {
+		if (length <= 0) {
 			if (http_read_buffer_eof(fd, pdata, plength) == -1)
 				ret = ERRNOLG;
 			close(fd);
 		} else {
-			*plength=length;
-			if (!(*pdata=malloc(length))) {
+			*plength = length;
+			if (!(*pdata = malloc(length))) {
 				close(fd);
 				return ERRMEM;
 			}
-			n=http_read_buffer(fd,*pdata,length);
+			n = http_read_buffer(fd, *pdata, length);
 			close(fd);
-			if (n!=length) ret=ERRRDDT;
+			if (n != length)
+				ret = ERRRDDT;
 		}
-	} else if (ret>=OK0) {
+	} else if (ret >= OK0) {
 		close(fd);
 	}
 
@@ -312,42 +374,59 @@ http_get(char *filename, char **pdata, int *plength, char *typebuf)
 extern http_retcode
 http_head(char *filename, int *plength, char *typebuf) 
 {
+	return httpmt_head(&_ctx, filename, plength, typebuf);
+}
+
+extern http_retcode
+httpmt_head(http_ctx *ctx, char *filename, int *plength, char *typebuf) 
+{
 /* mostly copied from http_get : */
 	http_retcode ret;
 	 
 	char header[MAXBUF];
 	char *pc;
-	int  fd;
-	int  n,length=-1;
+	int fd;
+	int n, length=-1;
+
+	if (ctx == NULL)
+		return ERRNULL;
 	
-	if (plength) *plength=0;
-	if (typebuf) *typebuf='\0';
+	if (plength)
+		*plength = 0;
+	if (typebuf)
+		*typebuf = '\0';
 	
-	ret=http_query("HEAD",filename,"",KEEP_OPEN, NULL, 0, &fd);
-	if (ret==OK200) {
+	ret = http_query(ctx, "HEAD", filename, "", KEEP_OPEN, NULL, 0, &fd);
+
+	if (ret == OK200) {
 		while (1) {
-			n=http_read_line(fd,header,MAXBUF-1);
+			n = http_read_line(fd, header, MAXBUF - 1);
 #ifdef _DEBUG
-			fputs(header,stderr);
-			putc('\n',stderr);
+			fputs(header, stderr);
+			putc('\n', stderr);
 #endif	
-			if (n<=0) {
+			if (n <= 0) {
 				close(fd);
 				return ERRRDHD;
 			}
 			/* empty line ? (=> end of header) */
-			if ( n>0 && (*header)=='\0') break;
+			if (n > 0 && (*header) == '\0')
+				break;
 			/* try to parse some keywords : */
 			/* convert to lower case 'till a : is found or end of string */
-			for (pc=header; (*pc!=':' && *pc) ; pc++) *pc=tolower(*pc);
-			sscanf(header,"content-length: %d",&length);
-			if (typebuf) sscanf(header,"content-type: %s",typebuf);
+			for (pc = header; (*pc != ':' && *pc); pc++)
+				*pc = tolower(*pc);
+			sscanf(header, "content-length: %d", &length);
+			if (typebuf)
+				sscanf(header, "content-type: %s", typebuf);
 		}
-		if (plength) *plength=length;
+		if (plength) 
+			*plength = length;
 		close(fd);
-	} else if (ret>=OK0) {
+	} else if (ret >= OK0) {
 		close(fd);
 	}
+
 	return ret;
 }
 	
@@ -361,18 +440,35 @@ http_head(char *filename, int *plength, char *typebuf)
  *	char *filename	name of the ressource to create
  * limitations: filename is truncated to first 256 characters 
  */
-	
 extern http_retcode
 http_delete(char *filename) 
 {
-	return http_query("DELETE",filename,"",CLOSE, NULL, 0, NULL);
+	return httpmt_delete(&_ctx, filename);
+}
+
+extern http_retcode
+httpmt_delete(http_ctx *ctx, char *filename) 
+{
+	if (ctx == NULL)
+		return ERRNULL;
+	else
+		return http_query(ctx, "DELETE", filename, "", CLOSE, NULL, 0, NULL);
 }
 	
 /*
 * post data
 */
 extern http_retcode
-http_post(char *filename, char *data, int length, char *type, char **pdata, int *plength, char **ptype)
+http_post(char *filename, char *data, int length, char *type, char **pdata,
+		int *plength, char **ptype)
+{
+	return httpmt_post(&_ctx, filename, data, length, type, pdata, plength,
+				ptype);
+}
+
+extern http_retcode
+httpmt_post(http_ctx *ctx, char *filename, char *data, int length, char *type,
+			char **pdata, int *plength, char **ptype)
 {
 	int fd;
 	char *pc;
@@ -380,6 +476,9 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 	char header[MAXBUF];
 	char typebuf[MAXBUF];
 	http_retcode ret;
+
+	if (ctx == NULL)
+		return ERRNULL;
 
 	if (data == NULL || length <= 0 || pdata == NULL || plength == NULL)
 		return ERRNULL;
@@ -396,45 +495,47 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 	else
 		sprintf(header, "Content-length: %d\015\012", length);
 	
-	ret = http_query("POST", filename, header, KEEP_OPEN, data, length, &fd);
+	ret = http_query(ctx, "POST", filename, header, KEEP_OPEN, data, length, &fd);
 	
 	if (ret==OK200) { 
 		while (1) {
-			n = http_read_line(fd,header,MAXBUF-1);
+			n = http_read_line(fd, header, MAXBUF - 1);
 #ifdef _DEBUG
-			fputs(header,stderr);
-			putc('\n',stderr);
+			fputs(header, stderr);
+			putc('\n', stderr);
 #endif	
-			if (n<=0) {
+			if (n <= 0) {
 				close(fd);
 				return ERRRDHD;
 			}
 	
 			/* empty line ? (=> end of header) */
-			if (n>0 && (*header) =='\0')
+			if (n > 0 && (*header) =='\0')
 				break;
 	
 			/* try to parse some keywords : */
 			/* convert to lower case 'till a : is found or end of string */
-			for (pc=header; (*pc!=':' && *pc) ; pc++) *pc=tolower(*pc);
-			sscanf(header,"content-length: %d",plength);
-			sscanf(header,"content-type: %s", typebuf);
+			for (pc = header; (*pc != ':' && *pc); pc++)
+				*pc = tolower(*pc);
+			sscanf(header, "content-length: %d", plength);
+			sscanf(header, "content-type: %s", typebuf);
 		}
 	
-		if (ptype) *ptype = strdup(typebuf);
+		if (ptype)
+			*ptype = strdup(typebuf);
 		
-		if (*plength<=0) {
-			if (http_read_buffer_eof(fd,pdata,plength) == -1) {
+		if (*plength <= 0) {
+			if (http_read_buffer_eof(fd, pdata, plength) == -1) {
 				ret = ERRNOLG;
 				if (ptype) {
 					free(*ptype);
 					*ptype = NULL;
 				}
-            }
+            		}
 
 			close(fd);
 		} else {
-			if (!(*pdata=malloc(*plength))) {
+			if (!(*pdata = malloc(*plength))) {
 				close(fd);
 				if (ptype) {
 					free(*ptype);
@@ -443,24 +544,75 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
 				return ERRMEM;
 			}
 	
-			n=http_read_buffer(fd,*pdata,*plength);
+			n = http_read_buffer(fd, *pdata, *plength);
 			close(fd);
 	
-			if (n!=*plength) {
+			if (n != *plength) {
 				free(*pdata);
 				*pdata = NULL;
 				if (ptype) {
 					free(*ptype);
 					*ptype = NULL;
 				}
-				ret=ERRRDDT;
+				ret = ERRRDDT;
 			}
 		}
-	} else if (ret>=OK0) {
+	} else if (ret >= OK0) {
 		close(fd);
 	}
 	
 	return ret;
+}
+
+/**
+ * set external base64 encoder for basic auth
+ */
+extern void
+http_set_base64_encoder(http_base64_encoder enc)
+{
+	httpmt_set_base64_encoder(&_ctx, enc);
+}
+
+extern void
+httpmt_set_base64_encoder(http_ctx *ctx, http_base64_encoder enc)
+{
+	if (ctx != NULL)
+		ctx->b64_enc = enc;
+}
+
+/**
+ * set basic auth for use in all requests, calls external
+ * base64 encoder
+ */
+extern http_retcode
+http_set_basic_auth(char *user, char *pass)
+{
+	return httpmt_set_basic_auth(&_ctx, user, pass);
+}
+
+extern http_retcode
+httpmt_set_basic_auth(http_ctx *ctx, char *user, char *pass)
+{
+	http_retcode r = OK0;
+	char userpass[MAXBUF];
+	char *b64;
+
+	if (ctx == NULL)
+		return ERRNULL;
+
+	if (ctx->b64_enc == NULL || user == NULL || pass == NULL)
+		return ERRNULL;
+
+	snprintf(userpass, MAXBUF, "%s:%s", user, pass);
+	if ((*ctx->b64_enc)(userpass, &b64) == -1)
+		return ERRMEM;
+
+	if (ctx->b64_auth)
+		free(ctx->b64_auth);
+
+	ctx->b64_auth = b64;
+
+	return r;
 }
 	
 /*
@@ -484,31 +636,33 @@ http_post(char *filename, char *data, int length, char *type, char **pdata, int 
  *				set file descriptor value
  */
 static http_retcode
-http_query(char *command, char *url, char *additional_header, 
+http_query(http_ctx *ctx, char *command, char *url, char *additional_header, 
 	querymode mode, char *data, int length, int *pfd) 
 {
-	int     s;
-	struct  hostent *hp;
-	struct  sockaddr_in     server;
+	int s;
+	struct hostent *hp;
+	struct sockaddr_in server;
 	char header[MAXBUF];
-	int  hlg;
+	int hlg;
 	http_retcode ret;
-	int  proxy=(http_proxy_server!=NULL && http_proxy_port!=0);
-	int  port = proxy ? http_proxy_port : http_port ;
+	int proxy; 
+	int port;
+
+	proxy = (ctx->proxy_server != NULL && ctx->proxy_port != 0);
+	port = proxy ? ctx->proxy_port : ctx->port;
 	 
 	if (pfd) *pfd=-1;
 	
 	/* get host info by name :*/
-	if ((hp = gethostbyname( proxy ? http_proxy_server 
-		: ( http_server ? http_server 
-		: SERVER_DEFAULT )
-		))) {
+	if ((hp = gethostbyname( proxy ? ctx->proxy_server 
+		: (ctx->server ? ctx->server : SERVER_DEFAULT)))) {
 		memset((char *) &server,0, sizeof(server));
 		memmove((char *) &server.sin_addr, hp->h_addr, hp->h_length);
 		server.sin_family = hp->h_addrtype;
 		server.sin_port = (unsigned short) htons( port );
-	} else
+	} else {
 		return ERRHOST;
+	}
 	
 	/* create socket */
 	if ((s = socket(AF_INET, SOCK_STREAM, 0)) < 0)
@@ -516,46 +670,46 @@ http_query(char *command, char *url, char *additional_header,
 	setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, 0, 0);
 	
 	/* connect to server */
-	if (connect(s, &server, sizeof(server)) < 0) 
-		ret=ERRCONN;
-	else {
-		if (pfd) *pfd=s;
+	if (connect(s, (const struct sockaddr *) &server, sizeof(server)) < 0) {
+		ret = ERRCONN;
+	} else {
+		if (pfd) *pfd = s;
 	 
 		/* create header */
 		if (proxy) {
-			if (http_basic_auth) {
-			sprintf(header,
-				"%s http://%.128s:%d/%.256s HTTP/1.0\015\012User-Agent: %s\015\012"
-				"Authorization: Basic %s\015\012%s\015\012",
-				command,
-				http_server,
-				http_port,
-				url,
-				http_user_agent,
-				http_basic_auth,
-				additional_header
-				);
+			if (ctx->b64_auth) {
+				sprintf(header,
+					"%s http://%.128s:%d/%.256s HTTP/1.0\015\012User-Agent: %s\015\012"
+					"Authorization: Basic %s\015\012%s\015\012",
+					command,
+					ctx->server,
+					ctx->port,
+					url,
+					http_user_agent,
+					ctx->b64_auth,
+					additional_header
+					);
 			} else {
 				sprintf(header,
 					"%s http://%.128s:%d/%.256s HTTP/1.0\015\012"
 					"User-Agent: %s\015\012%s\015\012",
 					command,
-					http_server,
-					http_port,
+					ctx->server,
+					ctx->port,
 					url,
 					http_user_agent,
 					additional_header
 				       );
 			}
 		} else {
-			if (http_basic_auth) {
+			if (ctx->b64_auth) {
 				sprintf(header,
 					"%s /%.256s HTTP/1.0\015\012User-Agent: %s\015\012"
 					"Authorization: Basic %s\015\012%s\015\012",
 					command,
 					url,
 					http_user_agent,
-					http_basic_auth,
+					ctx->b64_auth,
 					additional_header
 					);
 			} else {
@@ -569,31 +723,32 @@ http_query(char *command, char *url, char *additional_header,
 			}
 		}
 	
-		hlg=strlen(header);
+		hlg = strlen(header);
 		
 #ifdef _DEBUG
-		fputs(header,stderr);
-		putc('\n',stderr);
+		fputs(header, stderr);
+		putc('\n', stderr);
 #endif	
 	
 		/* send header */
-		if (write(s,header,hlg)!=hlg) {
-			ret= ERRWRHD;
+		if (write(s, header, hlg) != hlg) {
+			ret = ERRWRHD;
 			/* send data */
-		} else if (length && data && (write(s,data,length)!=length) ) {
-			ret= ERRWRDT;
+		} else if (length && data && (write(s, data, length) != length)) {
+			ret = ERRWRDT;
 		} else {
 			/* read result & check */
-			ret=http_read_line(s,header,MAXBUF-1);
+			ret = http_read_line(s, header, MAXBUF - 1);
 
-			if (ret<=0) 
-				ret=ERRRDHD;
-			else if (sscanf(header,"HTTP/1.%*d %03d",(int*)&ret)!=1) 
-				ret=ERRPAHD;
-			else if (mode==KEEP_OPEN)
+			if (ret <= 0) 
+				ret = ERRRDHD;
+			else if (sscanf(header, "HTTP/1.%*d %03d", (int*)&ret) != 1) 
+				ret = ERRPAHD;
+			else if (mode == KEEP_OPEN)
 				return ret;
 		}
 	}
+
 	/* close socket */
 	close(s);
 	return ret;
@@ -707,41 +862,6 @@ http_read_buffer_eof (int fd, char **pbuffer, int *plength)
 			*plength += r;
 		}
 	} while (1);
-
-	return r;
-}
-
-/**
- * set external base64 encoder for basic auth
- */
-extern void
-http_set_base64_encoder(http_base64_encoder enc)
-{
-	http_b64_enc = enc;
-}
-
-/**
- * set basic auth for use in all requests, calls external
- * base64 encoder
- */
-extern http_retcode
-http_set_basic_auth(char *user, char *pass)
-{
-	http_retcode r = OK0;
-	char userpass[MAXBUF];
-	char *b64;
-
-	if (http_b64_enc == NULL || user == NULL || pass == NULL)
-		return ERRNULL;
-
-	snprintf(userpass, MAXBUF, "%s:%s", user, pass);
-	if ((*http_b64_enc)(userpass, &b64) == -1)
-		return ERRMEM;
-
-	if (http_basic_auth)
-		free(http_basic_auth);
-
-	http_basic_auth = b64;
 
 	return r;
 }
