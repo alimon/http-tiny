@@ -1,7 +1,7 @@
 http-tiny
 =========
 
-http-tiny 1.2 fork support for POST and Basic auth
+http-tiny 1.2 improvments
 
 http-tiny is good implementation of HTTP for embedded 
 applications.
