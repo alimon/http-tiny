@@ -13,6 +13,9 @@
  /* declarations */
 typedef int (*http_base64_encoder)(const char *in, char **out);
 
+/* custom function to read buffer eof */
+typedef void (*http_buffer_eof_reader)(int fd);
+
 /* return type */
 typedef enum {
 
@@ -56,6 +59,8 @@ typedef struct _http_ctx {
 
 	http_base64_encoder b64_enc;
 	char *b64_auth;
+
+	http_buffer_eof_reader reader;
 } http_ctx;
 
 /* Functions */
@@ -71,6 +76,7 @@ extern http_retcode http_post(char *filename, char *data, int length,
 			char *type, char **pdata, int *plength, char **ptype);
 extern void http_set_base64_encoder(http_base64_encoder enc);
 extern http_retcode http_set_basic_auth(char *user, char *pass);
+extern void http_set_buffer_eof_reader(http_buffer_eof_reader reader);
 
 /* Multi-thread functions */
 extern http_retcode httpmt_parse_url(http_ctx *ctx, char *url, char **pfilename);
@@ -86,3 +92,4 @@ extern http_retcode httpmt_post(http_ctx *ctx, char *filename, char *data, int l
 		char *type, char **pdata, int *plength, char **ptype);
 extern void httpmt_set_base64_encoder(http_ctx *ctx, http_base64_encoder enc);
 extern http_retcode httpmt_set_basic_auth(http_ctx *ctx, char *user, char *pass);
+extern void httpmt_set_buffer_eof_reader(http_ctx *ctx, http_buffer_eof_reader reader);

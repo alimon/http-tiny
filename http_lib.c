@@ -10,6 +10,10 @@
  *
  * Description : Use http protocol, connects to server to echange data
  *
+ * Revision 4.1 2013/10/13 14:15:00 -0500
+ * Added function pointer for custom buffer EOF reader.
+ * Author: alimon <limon.anibal@gmail.com>
+ *
  * Revision 4.0 2013/10/13 13:15:00 -0500
  * Added functions for multi-thread support httpmt_.
  * Author: alimon <limon.anibal@gmail.com>
@@ -103,7 +107,9 @@ static http_ctx _ctx = {
 	.proxy_port = 0,
 
 	.b64_enc = NULL,
-	.b64_auth = NULL
+	.b64_auth = NULL,
+
+	.reader = NULL
 };
 
 /* parses an url : setting the http_server and http_port global variables
@@ -334,8 +340,12 @@ httpmt_get(http_ctx *ctx, char *filename, char **pdata, int *plength, char *type
 		}
 
 		if (length <= 0) {
-			if (http_read_buffer_eof(fd, pdata, plength) == -1)
-				ret = ERRNOLG;
+			if (ctx->reader) {
+				(*ctx->reader)(fd);
+			} else {
+				if (http_read_buffer_eof(fd, pdata, plength) == -1)
+					ret = ERRNOLG;
+			}
 			close(fd);
 		} else {
 			*plength = length;
@@ -525,13 +535,17 @@ httpmt_post(http_ctx *ctx, char *filename, char *data, int length, char *type,
 			*ptype = strdup(typebuf);
 		
 		if (*plength <= 0) {
-			if (http_read_buffer_eof(fd, pdata, plength) == -1) {
-				ret = ERRNOLG;
-				if (ptype) {
-					free(*ptype);
-					*ptype = NULL;
-				}
-            		}
+			if (ctx->reader) {
+				(*ctx->reader)(fd);
+			} else {
+				if (http_read_buffer_eof(fd, pdata, plength) == -1) {
+					ret = ERRNOLG;
+					if (ptype) {
+						free(*ptype);
+						*ptype = NULL;
+					}
+            			}
+			}
 
 			close(fd);
 		} else {
@@ -613,6 +627,21 @@ httpmt_set_basic_auth(http_ctx *ctx, char *user, char *pass)
 	ctx->b64_auth = b64;
 
 	return r;
+}
+/**
+ * set custom buffer reader
+ */
+extern void
+http_set_buffer_eof_reader(http_buffer_eof_reader reader)
+{
+	return httpmt_set_buffer_eof_reader(&_ctx, reader);
+}
+
+extern void
+httpmt_set_buffer_eof_reader(http_ctx *ctx, http_buffer_eof_reader reader)
+{
+	if (ctx != NULL)
+		ctx->reader = reader;
 }
 	
 /*
@@ -792,7 +821,7 @@ static int http_read_line (int fd, char *buffer, int max)
  *	int length	number of bytes to read
  */
 static int 
-http_read_buffer (int fd, char *buffer, int length) 
+http_read_buffer(int fd, char *buffer, int length) 
 {
 	int n,r;
 	for (n=0; n<length; n+=r) {
@@ -813,7 +842,7 @@ http_read_buffer (int fd, char *buffer, int length)
  *	int *plength	number of bytes read
  */
 static int 
-http_read_buffer_eof (int fd, char **pbuffer, int *plength) 
+http_read_buffer_eof(int fd, char **pbuffer, int *plength) 
 {
 	int r = 0;
 	static int page_size = 0;
